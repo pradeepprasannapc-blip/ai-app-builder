@@ -5,6 +5,7 @@ import streamlit.components.v1 as components
 # --- 1. PAGE CONFIGURATION & PREMIUM UI ---
 st.set_page_config(page_title="Base44 Alternative - Pro AI App Factory", page_icon="⚡", layout="wide")
 
+# UI එක ලස්සන කරන්න Custom CSS (මෙහි තිබූ unsafe_scale වැරැද්ද නිවැරදි කර ඇත)
 st.markdown("""
     <style>
     .stApp {
@@ -38,7 +39,7 @@ st.markdown("""
         border-radius: 8px;
     }
     </style>
-""", unsafe_scale=True, unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
 # --- 2. SECRETS HANDLING (Error-Proof) ---
 default_gemini_key = ""
@@ -106,7 +107,6 @@ if st.button("🚀 GENERATE MASTER APP", use_container_width=True):
                 genai.configure(api_key=gemini_key)
                 model = genai.GenerativeModel(selected_model)
                 
-                # අතිශය පැහැදිලි AI Prompt එක (දෝෂ අවම කිරීම සඳහා)
                 master_prompt = f"""
                 ඔබ ලෝකයේ සිටින අති දක්ෂතම Full-Stack Mobile App UX Designer සහ Developer කෙනෙක්.
                 මූලාශ්‍රය: {source_info}
@@ -122,13 +122,12 @@ if st.button("🚀 GENERATE MASTER APP", use_container_width=True):
                 response = model.generate_content(master_prompt)
                 full_text = response.text
                 
-                # කේතය සහ විස්තරය වෙන් කිරීම (Robust extraction)
                 if "```html" in full_text:
                     parts = full_text.split("```html")
                     explanation = parts[0].strip()
                     html_code = parts[1].split("```")[0].strip()
                 else:
-                    explanation = "මෙන්න ඔබගේ ඇප් එකේ කේතය (AI විසින් Markdown නොමැතිව ලබා දී ඇත):"
+                    explanation = "මෙන්න ඔබගේ ඇප් එකේ කේතය:"
                     html_code = full_text
                 
                 st.success("🎯 ඇප් එක සාර්ථකව නිම කරන ලදී!")
@@ -144,11 +143,10 @@ if st.button("🚀 GENERATE MASTER APP", use_container_width=True):
                 with col2:
                     st.subheader("📱 Instant Mobile View")
                     st.markdown('<div style="border: 6px solid #30363d; border-radius: 24px; padding: 10px; background: #000; box-shadow: 0 4px 20px rgba(0,0,0,0.5);">', unsafe_allow_html=True)
-                    # HTML render කිරීම
                     components.html(edited_code, height=580, scrolling=True)
                     st.markdown('</div>', unsafe_allow_html=True)
                 
-                # --- 7. APK EXPORT SECTION (Future integration) ---
+                # --- 7. APK EXPORT SECTION ---
                 st.markdown("---")
                 st.subheader("📦 Export Package (APK / AAB)")
                 st.write("ඔබගේ ඇප් එක දැන් සූදානම්! මීළඟ අදියරේදී අපි මෙතනින් කෙලින්ම APK එක Download කරගන්නා Cloud Build System එක සම්බන්ධ කරමු.")
