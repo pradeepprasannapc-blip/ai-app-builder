@@ -2,3 +2,4 @@ streamlit
 google-generativeai>=0.7.0
 supabase
 requests
+pillow>=10.3.0
