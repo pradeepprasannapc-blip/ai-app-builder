@@ -5,11 +5,16 @@ import google.generativeai as genai
 st.set_page_config(page_title="AI App Builder", page_icon="🤖", layout="wide")
 st.title("🤖 AI App Builder")
 
-# Sidebar එකේ Keys ලබාගැනීම
+# Secrets වලින් Default Keys ගැනීම (තිබුණොත් විතරක්)
+default_supa_url = st.secrets.get("SUPABASE_URL", "")
+default_supa_key = st.secrets.get("SUPABASE_KEY", "")
+default_gemini_key = st.secrets.get("GEMINI_KEY", "")
+
+# Sidebar එකේ Keys ලබාගැනීම (Default values එක්ක)
 st.sidebar.header("🔑 API Configurations")
-supabase_url = st.sidebar.text_input("Supabase Project URL", type="password")
-supabase_key = st.sidebar.text_input("Supabase Anon API Key", type="password")
-gemini_key = st.sidebar.text_input("Google Gemini API Key", type="password")
+supabase_url = st.sidebar.text_input("Supabase Project URL", value=default_supa_url, type="password")
+supabase_key = st.sidebar.text_input("Supabase Anon API Key", value=default_supa_key, type="password")
+gemini_key = st.sidebar.text_input("Google Gemini API Key", value=default_gemini_key, type="password")
 
 if supabase_url and supabase_key and gemini_key:
     # Database සහ AI සම්බන්ධ කිරීම
