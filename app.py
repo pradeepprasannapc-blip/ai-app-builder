@@ -4,7 +4,7 @@ import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Base44 Alternative - AI App Factory", page_icon="⚡", layout="wide")
 
-# Secrets ගන්න කොටස Error-proof කිරීම (Error එකක් ආවොත් හිස්ව තියාගන්නවා)
+# Secrets ගන්න කොටස Error-proof කිරීම
 def get_secret(key):
     try:
         return st.secrets[key]
@@ -25,7 +25,9 @@ st.write("ඕනෑම වෙබ් අඩවියක් හෝ අදහසක
 
 if gemini_key:
     genai.configure(api_key=gemini_key)
-    model = genai.GenerativeModel('gemini-pro')
+    
+    # 🎯 මෙතන අපි පරණ 'gemini-pro' වෙනුවට අලුත්ම 'gemini-1.5-pro' ඇතුළත් කළා
+    model = genai.GenerativeModel('gemini-1.5-pro')
     
     user_input = st.text_area("ඔබට අවශ්‍ය ඇප් එක ගැන විස්තර කරන්න (හෝ URL එකක් දෙන්න):", height=100, placeholder="උදා: මට Trading Signals පෙන්නන ලස්සන Dark Mode ඇප් එකක් හදලා දෙන්න...")
     
