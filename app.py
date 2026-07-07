@@ -56,6 +56,8 @@ with st.sidebar:
     st.write("ඔබගේ Key එකට ගැළපෙන හොඳම Model එක තෝරන්න:")
     
     model_options = [
+        "gemini-2.5-flash",
+        "gemini-2.5-pro",
         "gemini-1.5-flash", 
         "gemini-1.5-pro", 
         "gemini-1.0-pro",
