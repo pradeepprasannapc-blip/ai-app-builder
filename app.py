@@ -1,24 +1,49 @@
 import streamlit as st
+from supabase import create_client
+import google.generativeai as genai
 
 st.set_page_config(page_title="AI App Builder", page_icon="🤖", layout="wide")
-st.title("🤖 AI App Builder - Control Panel")
-st.success("Repositories 8ම සාර්ථකව සම්බන්ධ කර ඇත!")
+st.title("🤖 AI App Builder")
 
+# Sidebar එකේ Keys ලබාගැනීම
 st.sidebar.header("🔑 API Configurations")
-st.sidebar.text_input("Supabase Project URL", placeholder="https://your-project.supabase.co")
-st.sidebar.text_input("Supabase Anon API Key", type="password")
-st.sidebar.text_input("Google Gemini AI Key", type="password")
+supabase_url = st.sidebar.text_input("Supabase Project URL", type="password")
+supabase_key = st.sidebar.text_input("Supabase Anon API Key", type="password")
+gemini_key = st.sidebar.text_input("Google Gemini API Key", type="password")
 
-st.write("### 📂 Your Connected Repositories")
-st.code("""
-1. cli
-2. javascript-sdk
-3. apps-examples
-4. skills
-5. kotlin-sdk
-6. swift-sdk
-7. homebrew-tap
-8. openclaw-onboarding
-""")
+if supabase_url and supabase_key and gemini_key:
+    # Database සහ AI සම්බන්ධ කිරීම
+    try:
+        supabase = create_client(supabase_url, supabase_key)
+        genai.configure(api_key=gemini_key)
+        model = genai.GenerativeModel('gemini-pro')
+        
+        st.success("✅ Database සහ AI සාර්ථකව සම්බන්ධ විය!")
 
-st.info("මීළඟට අපි Supabase (Database) සහ Gemini (AI) Keys මෙතැනට සම්බන්ධ කරමු.")
+        # ඇප් එකේ ප්‍රධාන කොටස
+        st.write("### 📂 Repositories")
+        repos = ["cli", "javascript-sdk", "apps-examples", "skills", "kotlin-sdk", "swift-sdk", "homebrew-tap", "openclaw-onboarding"]
+        selected_repo = st.selectbox("Select a Repository to Analyze", repos)
+        
+        user_query = st.text_input(f"What do you want to build or know about '{selected_repo}'?")
+
+        if st.button("Ask AI"):
+            if user_query:
+                with st.spinner("AI is thinking..."):
+                    try:
+                        # AI එකෙන් පිළිතුරු ගැනීම
+                        response = model.generate_content(f"Analyze the {selected_repo} repository context and answer this: {user_query}")
+                        st.info(response.text)
+                        
+                        # අසපු දේ Supabase Database එකට සේව් කිරීම
+                        supabase.table("ai_logs").insert({"repo": selected_repo, "query": user_query}).execute()
+                        st.toast("✅ Saved to Database!")
+                        
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+            else:
+                st.warning("කරුණාකර ප්‍රශ්නයක් ඇතුළත් කරන්න.")
+    except Exception as e:
+        st.error(f"Connection Error: කරුණාකර ඔබගේ Keys නිවැරදිදැයි පරීක්ෂා කරන්න. ({e})")
+else:
+    st.warning("👈 කරුණාකර Sidebar එකට Supabase Keys සහ Gemini Key එක ඇතුළත් කරන්න.")
