@@ -59,9 +59,9 @@ with st.sidebar:
         
         if not st.session_state.github_token:
             auth_url = f"https://github.com/login/oauth/authorize?client_id={client_id}&scope=repo%20workflow"
-            # 💡 FIX: Browser Crash වීම වැළැක්වීමට Native HTML Link එකක් යොදා ගැනීම
+            # 💡 FIX: iframe Security Issue විසඳීම සඳහා target="_blank" යෙදීම
             st.markdown(f"""
-                <a href="{auth_url}" target="_self" style="text-decoration: none;">
+                <a href="{auth_url}" target="_blank" style="text-decoration: none;">
                     <div style="background: linear-gradient(45deg, #4f46e5, #06b6d4); color: white; padding: 10px 24px; border-radius: 8px; text-align: center; font-weight: bold; margin-bottom: 10px;">
                         🔑 Login with GitHub
                     </div>
@@ -153,7 +153,7 @@ with tab3:
                 user_context = f"GitHub Repo: {github_input}"
                 source_info = "GitHub Fallback"
 
-# --- 4. ENGINE START ---
+# --- 4. ENGINE START (ADVANCED FULL-STACK PROMPT & FOOL-PROOF EXTRACTOR) ---
 if st.button("🚀 GENERATE MASTER APP", use_container_width=True):
     if not gemini_key:
         st.error("👈 කරුණාකර ප්‍රථමයෙන් Gemini API Key එක ලබා දෙන්න.")
@@ -173,8 +173,8 @@ if st.button("🚀 GENERATE MASTER APP", use_container_width=True):
                 අනිවාර්ය අවශ්‍යතා:
                 1. Premium UI: Tailwind CSS භාවිතයෙන් අතිශය නවීන, ආකර්ෂණීය Dark Mode UI එකක් සාදන්න. Glassmorphism, Box Shadows සහ Smooth CSS animations භාවිතා කරන්න.
                 2. Real Functionality: කේතයේ ඇති බොත්තම්, Side menus, සහ Bottom Navigation අනිවාර්යයෙන්ම වැඩ කළ යුතුය. JavaScript භාවිතයෙන් පිටු අතර (Sections) මාරු වීම සකසන්න (Hide/Show divs).
-                3. Business Logic: යෙදුමේ ප්‍රධාන කාර්යයන් සඳහා අවශ්‍ය JavaScript Logic අනිවාර්යයෙන්ම ලියන්න.
-                4. Data Storage: LocalStorage භාවිතා කර දත්ත Save සහ Load වීමට සකසන්න. 
+                3. Business Logic: යෙදුමේ ප්‍රධාන කාර්යයන් සඳහා අවශ්‍ය JavaScript Logic (උදා: Forms submit වීම, ගණනය කිරීම්, දත්ත පෙන්නුම් කිරීම) අනිවාර්යයෙන්ම ලියන්න.
+                4. Data Storage: API සම්බන්ධතා නොමැති තැන් වලදී දත්ත අහිමි නොවීම සඳහා LocalStorage භාවිතා කර දත්ත Save සහ Load වීමට සකසන්න. 
                 5. Font & Icons: Google Fonts (Poppins) සහ FontAwesome icons භාවිතා කරන්න.
                 
                 කිසිදු පැහැදිලි කිරීමක් අවශ්‍ය නැත. සම්පූර්ණ HTML, CSS (Tailwind), සහ අදාළ සියලුම JavaScript කේතයන් එකම කේතයක් ලෙස ```html සහ ``` අතර පමණක් ලබා දෙන්න."""
