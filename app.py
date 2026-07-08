@@ -25,7 +25,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Session State කළමනාකරණය
+# Session States
 if "app_code" not in st.session_state: st.session_state.app_code = None
 if "github_token" not in st.session_state: st.session_state.github_token = None
 if "build_running" not in st.session_state: st.session_state.build_running = False
@@ -44,7 +44,6 @@ with st.sidebar:
     st.markdown("---")
     st.subheader("🐙 GitHub Account")
     
-    # Shortcut එකේ ඉන්න අයට ලෙහෙසි වෙන්න ක්‍රම 2ක් දීම
     login_method = st.radio("සම්බන්ධ වන ක්‍රමය:", ["OAuth Login (Browser)", "Manual Token (For Shortcuts)"], horizontal=True)
     
     if login_method == "OAuth Login (Browser)":
@@ -62,11 +61,9 @@ with st.sidebar:
         if not st.session_state.github_token:
             auth_url = f"https://github.com/login/oauth/authorize?client_id={client_id}&scope=repo%20workflow"
             st.link_button("🔑 Login with GitHub", auth_url, type="primary", use_container_width=True)
-            st.caption("💡 Shortcut එකෙන් ඉවතට බ්‍රවුසර් එකට රිඩිරෙක්ට් වේ නම් පල්ලෙහා ක්‍රමය භාවිතා කරන්න.")
     else:
-        manual_token = st.text_input("ඔබගේ GitHub Personal Token එක දමන්න:", type="password", placeholder="ghp_...")
-        if manual_token:
-            st.session_state.github_token = manual_token
+        manual_token = st.text_input("GitHub Token එක දමන්න:", type="password")
+        if manual_token: st.session_state.github_token = manual_token
 
     github_repo = ""
     github_token = ""
@@ -81,7 +78,6 @@ with st.sidebar:
             
         github_token = st.session_state.github_token
         
-        # AUTO REPO DROPDOWN LIST
         with st.spinner("Repositories ගෙන එමින්..."):
             try:
                 repo_headers = {"Authorization": f"token {github_token}", "Accept": "application/vnd.github.v3+json"}
@@ -118,11 +114,11 @@ with tab2:
     if url_input: user_context, source_info = f"වෙබ් අඩවියේ URL එක: {url_input}.", f"Web URL ({url_input})"
 
 with tab3:
-    github_input = st.text_input("කියවීමට අවශ්‍ය GitHub Repo URL එක හෝ නම දමන්න (Public):", placeholder="username/repo-name හෝ URL එක")
+    # 💡 FIX: Sidebar එකේ තෝරපු Repo එක ඉබේම මෙතන පිරවෙනවා!
+    github_input = st.text_input("කියවීමට අවශ්‍ය GitHub Repo URL එක හෝ නම දමන්න:", value=github_repo, placeholder="username/repo-name")
     if github_input:
         with st.spinner("GitHub Repository එක පරීක්ෂා කරමින් පවතී..."):
             try:
-                # URL එකක්ද නැත්නම් නමක් විතරද කියලා බුද්ධිමත්ව හඳුනා ගැනීම (FIX)
                 clean_input = github_input.strip()
                 repo_path = clean_input.split("github.com/")[-1].rstrip("/") if "github.com/" in clean_input else clean_input.rstrip("/")
                 
@@ -135,10 +131,8 @@ with tab3:
                     source_info = f"GitHub Scanner ({repo_path})"
                     st.success("🐙 GitHub Repo එක සාර්ථකව හඳුනාගන්නා ලදී!")
                 else:
-                    # API Fail වුණත් input එක තියෙන නිසා Generate කරන්න ඉඩ දෙනවා
-                    user_context = f"GitHub Repo: {repo_path}. මීට ගැළපෙන ඇප් එකක් සාදන්න."
+                    user_context = f"GitHub Repo: {repo_path}."
                     source_info = f"GitHub Repo Manual"
-                    st.warning("⚠️ බාහිරව Repo එක කියවීමට නොහැකි වුවත්, ඇප් එක සෑදීමට උත්සාහ කරයි.")
             except Exception as e:
                 user_context = f"GitHub Repo: {github_input}"
                 source_info = "GitHub Fallback"
@@ -148,7 +142,7 @@ if st.button("🚀 GENERATE MASTER APP", use_container_width=True):
     if not gemini_key:
         st.error("👈 කරුණාකර ප්‍රථමයෙන් Gemini API Key එක ලබා දෙන්න.")
     elif not user_context:
-        st.warning("⚠️ කරුණාකර තොරතුරු ඇතුළත් කරන්න (උඩ ඇති Tabs වලින් එකක් තෝරා තොරතුරු ඇතුලත් කරන්න).")
+        st.warning("⚠️ කරුණාකර තොරතුරු ඇතුළත් කරන්න.")
     else:
         with st.spinner("AI මාදිලිය මඟින් කේතය ලියමින් පවතී..."):
             try:
@@ -175,17 +169,26 @@ if st.session_state.app_code:
         components.html(edited_code, height=430, scrolling=True)
         st.markdown('</div>', unsafe_allow_html=True)
         
-    # --- 6. GITHUB ACTIONS APK BUILD ENGINE ---
+    # --- 6. GITHUB ACTIONS APK BUILD ENGINE (MAGIC AUTO-INJECT) ---
     st.markdown("---")
     st.subheader("📦 Base44 Pro APK Compiler (Cloud Engine)")
     
     if st.button("🏗️ Trigger Remote Cloud Build & Get APK", type="primary", use_container_width=True, disabled=st.session_state.build_running):
         if not github_token or not github_repo:
-            st.error("👈 කරුණාකර වම් පස ඇති Sidebar එකෙන් GitHub ගිණුමට ලොග් වී ඔබගේ Repository එක තෝරන්න.")
+            st.error("👈 කරුණාකර වම් පස ඇති Sidebar එකෙන් GitHub ගිණුමට ලොග් වී Repo එකක් තෝරන්න.")
         else:
             headers = {"Authorization": f"token {github_token}", "Accept": "application/vnd.github.v3+json"}
-            file_url = f"https://api.github.com/repos/{github_repo}/contents/index.html"
             
+            # 💡 FIX 1: Workflow මැෂිම Repo එකේ නැත්නම් ඒක ඉබේම හදනවා (Auto-Inject)
+            wf_url = f"https://api.github.com/repos/{github_repo}/contents/.github/workflows/build.yml"
+            wf_check = requests.get(wf_url, headers=headers)
+            if wf_check.status_code != 200:
+                yaml_content = """name: Build Android APK\non:\n  push:\n    branches: [ main ]\n  workflow_dispatch:\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n    - uses: actions/checkout@v3\n    - uses: actions/setup-node@v3\n      with:\n        node-version: 18\n    - run: npm install -g cordova\n    - run: |\n        cordova create myapp com.premium.aifactory AI_App\n        cd myapp\n        cordova platform add android\n        rm www/index.html\n        cp ../index.html www/index.html\n    - uses: actions/setup-java@v3\n      with:\n        distribution: 'zulu'\n        java-version: '17'\n    - uses: android-actions/setup-android@v3\n    - run: |\n        cd myapp\n        cordova build android --no-telemetry\n    - uses: actions/upload-artifact@v4\n      with:\n        name: premium-app-apk\n        path: myapp/platforms/android/app/build/outputs/apk/debug/app-debug.apk"""
+                wf_payload = {"message": "Auto-setup Cloud Build Workflow", "content": base64.b64encode(yaml_content.encode('utf-8')).decode('utf-8')}
+                requests.put(wf_url, headers=headers, json=wf_payload)
+            
+            # 2: HTML කේතය Upload කිරීම
+            file_url = f"https://api.github.com/repos/{github_repo}/contents/index.html"
             sha = ""
             get_res = requests.get(file_url, headers=headers)
             if get_res.status_code == 200: sha = get_res.json()['sha']
@@ -203,7 +206,7 @@ if st.session_state.app_code:
             else:
                 st.error(f"❌ GitHub අප්ලෝඩ් එක අසාර්ථකයි: {push_res.text}")
 
-    # --- 7. LIVE COMPILER TRACKER ---
+    # --- 7. LIVE COMPILER TRACKER (BUG FIXED) ---
     if st.session_state.build_running:
         with st.status("🛠️ Cloud Build එක සිදුවෙමින් පවතී...", expanded=True) as status:
             for log in st.session_state.build_log: status.write(log)
@@ -212,7 +215,8 @@ if st.session_state.app_code:
             
             try:
                 run_res = requests.get(runs_url, headers=headers).json()
-                if run_res.get("workflow_runs"):
+                # 💡 FIX 2: Runs නැත්නම් (තාම පටන් ගත්තේ නැත්නම්) හිරවෙන්නේ නෑ
+                if "workflow_runs" in run_res and len(run_res["workflow_runs"]) > 0:
                     latest_run = run_res["workflow_runs"][0]
                     status_git = latest_run["status"]
                     conclusion = latest_run["conclusion"]
@@ -227,14 +231,18 @@ if st.session_state.app_code:
                                 st.session_state.apk_url = f"https://github.com/{github_repo}/actions/artifacts/{art_id}"
                                 st.toast("🎯 APK බිල්ඩ් එක සාර්ථකයි!", icon="🎉")
                         else:
-                            st.error("❌ Cloud Build එක අසාර්ථක වුණා.")
+                            st.error("❌ Cloud Build එක අසාර්ථක වුණා. GitHub වල Actions ටැබ් එක බලන්න.")
                         st.rerun()
                     else:
                         time.sleep(6)
                         st.rerun()
+                else:
+                    status.write("⏳ GitHub Actions පණගැන්වෙමින් පවතී... (කරුණාකර රැඳී සිටින්න)")
+                    time.sleep(6)
+                    st.rerun()
             except Exception as e:
                 st.session_state.build_running = False
-                st.error(f"Error: {e}")
+                st.error(f"Error Tracking Build: {e}")
 
     if st.session_state.apk_url:
         st.markdown("---")
