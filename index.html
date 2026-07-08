@@ -1,255 +1,367 @@
 <!DOCTYPE html>
-<html lang="si" class="dark">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Trading Dashboard - Blip</title>
+    <title>AI App Builder - Create Intelligent Apps with Ease</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Tailwind CSS Configuration for Dark Mode and Custom Colors -->
-    <script type="tailwind-config">
-        {
-            "darkMode": "class",
-            "theme": {
-                "extend": {
-                    "colors": {
-                        "primary": "#6366f1",     /* Indigo 500 */
-                        "primary-dark": "#4f46e5",/* Indigo 600 */
-                        "secondary": "#10b981",   /* Emerald 500 */
-                        "darkbg": "#0f172a",      /* Slate 900 */
-                        "darkcard": "#1e293b",    /* Slate 800 */
-                        "lightbg": "#f8fafc",     /* Slate 50 */
-                        "lightcard": "#ffffff"    /* White */
-                    },
-                    "fontFamily": {
-                        "sans": ["Inter", "sans-serif"]
+    <!-- Configure Tailwind to enable dark mode based on class -->
+    <script>
+        tailwind.config = {
+            darkMode: 'class', // Enables dark mode based on 'dark' class on HTML tag
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#F0F9FF', 100: '#E0F2FE', 200: '#BAE6FD', 300: '#7DD3FC', 400: '#38BDF8',
+                            500: '#0EA5E9', 600: '#0284C7', 700: '#0369A1', 800: '#075985', 900: '#0C4A6E'
+                        },
+                        secondary: {
+                            50: '#FDF2F8', 100: '#FCE7F3', 200: '#FBCFE8', 300: '#F9A8D4', 400: '#F472B6',
+                            500: '#EC4899', 600: '#DB2777', 700: '#BE185D', 800: '#9D174D', 900: '#831843'
+                        },
+                        darkBg: '#1a202c', // Custom dark background
+                        darkCard: '#2d3748', // Custom dark card background
+                        darkText: '#e2e8f0', // Custom dark text color
                     }
                 }
             }
         }
     </script>
     <style>
-        /* Google Fonts - Inter for a modern look */
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
-
-        /* Custom Scrollbar Styling for a premium feel */
-        ::-webkit-scrollbar {
-            width: 8px;
-            height: 8px;
+        /* Optional custom styles for smoother transitions or specific elements */
+        body {
+            transition: background-color 0.3s ease, color 0.3s ease;
         }
-        ::-webkit-scrollbar-track {
-            background: theme('colors.lightbg');
-            border-radius: 10px;
+        .card {
+            transition: background-color 0.3s ease, transform 0.2s ease, box-shadow 0.3s ease;
         }
-        .dark ::-webkit-scrollbar-track {
-            background: theme('colors.darkbg');
+        .card:hover {
+            transform: translateY(-5px);
         }
-        ::-webkit-scrollbar-thumb {
-            background: theme('colors.primary');
-            border-radius: 10px;
+        /* Specific shadow for dark mode cards to make them pop more */
+        .dark .card {
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2), 0 2px 4px -1px rgba(0, 0, 0, 0.12);
         }
-        ::-webkit-scrollbar-thumb:hover {
-            background: theme('colors.primary-dark');
+        /* Simple scroll-to-top button style */
+        #scrollToTopBtn {
+            display: none;
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 99;
+            border: none;
+            outline: none;
+            cursor: pointer;
+            padding: 15px;
+            border-radius: 50%;
+            font-size: 18px;
         }
+        /* Keyframe for subtle fade-in-up animation */
+        @keyframes fade-in-up {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .animate-fade-in-up {
+            animation: fade-in-up 0.6s ease-out forwards;
+            opacity: 0; /* Hidden by default */
+        }
+        .delay-200 { animation-delay: 0.2s; }
+        .delay-400 { animation-delay: 0.4s; }
     </style>
 </head>
-<body class="font-sans antialiased text-gray-900 bg-lightbg dark:bg-darkbg dark:text-gray-100 transition-colors duration-300 ease-in-out">
-    <div class="min-h-screen flex flex-col">
-        <!-- Header -->
-        <header class="bg-lightcard dark:bg-darkcard shadow-sm dark:shadow-xl p-4 flex justify-between items-center transition-colors duration-300 z-10">
-            <div class="flex items-center space-x-4">
-                <!-- AI Blip Logo/Icon -->
-                <svg class="h-8 w-8 text-primary" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93h14c0 4.08-3.05 7.44-7 7.93zM8.5 10c-.83 0-1.5-.67-1.5-1.5S7.67 7 8.5 7s1.5.67 1.5 1.5S9.33 10 8.5 10zm7 0c-.83 0-1.5-.67-1.5-1.5S14.67 7 15.5 7s1.5.67 1.5 1.5S16.33 10 15.5 10z"/>
+<body class="bg-gray-50 text-gray-900 dark:bg-darkBg dark:text-darkText font-sans leading-normal tracking-normal antialiased">
+
+    <!-- Header -->
+    <header class="bg-white dark:bg-darkCard shadow-md py-4 sticky top-0 z-50 transition-colors duration-300">
+        <div class="container mx-auto flex justify-between items-center px-6">
+            <a href="#" class="flex items-center space-x-2">
+                <svg class="h-8 w-8 text-primary-600 dark:text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
                 </svg>
-                <h1 class="text-2xl font-extrabold text-gray-800 dark:text-gray-50">AI Trading Blip</h1>
-            </div>
-            <!-- Navigation -->
+                <span class="text-2xl font-bold text-gray-800 dark:text-darkText">AI App Builder</span>
+            </a>
             <nav class="hidden md:flex space-x-6">
-                <a href="#" class="text-gray-600 dark:text-gray-300 hover:text-primary dark:hover:text-primary font-medium transition-colors duration-200">Dashboard</a>
-                <a href="#" class="text-gray-600 dark:text-gray-300 hover:text-primary dark:hover:text-primary font-medium transition-colors duration-200">Portfolio</a>
-                <a href="#" class="text-gray-600 dark:text-gray-300 hover:text-primary dark:hover:text-primary font-medium transition-colors duration-200">Trade</a>
-                <a href="#" class="text-gray-600 dark:text-gray-300 hover:text-primary dark:hover:text-primary font-medium transition-colors duration-200">Analytics</a>
-                <a href="#" class="text-gray-600 dark:text-gray-300 hover:text-primary dark:hover:text-primary font-medium transition-colors duration-200">Settings</a>
+                <a href="#home" class="text-gray-600 hover:text-primary-600 dark:text-gray-300 dark:hover:text-primary-400 transition-colors duration-200">Home</a>
+                <a href="#features" class="text-gray-600 hover:text-primary-600 dark:text-gray-300 dark:hover:text-primary-400 transition-colors duration-200">Features</a>
+                <a href="#examples" class="text-gray-600 hover:text-primary-600 dark:text-gray-300 dark:hover:text-primary-400 transition-colors duration-200">Examples</a>
+                <a href="#sdks" class="text-gray-600 hover:text-primary-600 dark:text-gray-300 dark:hover:text-primary-400 transition-colors duration-200">SDKs</a>
+                <a href="https://github.com/pradeepprasannapc-blip/ai-app-builder" target="_blank" rel="noopener noreferrer" class="text-gray-600 hover:text-primary-600 dark:text-gray-300 dark:hover:text-primary-400 transition-colors duration-200">GitHub</a>
             </nav>
-            <!-- User Profile and Dark Mode Toggle -->
             <div class="flex items-center space-x-4">
-                <button id="darkModeToggle" class="p-2 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-primary dark:focus:ring-primary transition-colors duration-200">
-                    <!-- Moon icon for light mode, Sun icon for dark mode -->
-                    <svg id="moonIcon" class="h-6 w-6 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path></svg>
-                    <svg id="sunIcon" class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h1M3 12H2m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                <!-- Dark Mode Toggle -->
+                <button id="darkModeToggle" class="p-2 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-colors duration-200">
+                    <svg id="moonIcon" class="h-6 w-6 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                    </svg>
+                    <svg id="sunIcon" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.354 5.354l-.707.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                    </svg>
                 </button>
-                <div class="relative group">
-                    <img class="h-10 w-10 rounded-full object-cover border-2 border-primary ring-2 ring-transparent group-hover:ring-primary transition-all duration-200" src="https://api.dicebear.com/7.x/pixel-art/svg?seed=pradeepprasanna" alt="User Avatar">
-                    <span class="absolute bottom-0 right-0 block h-3 w-3 rounded-full bg-green-500 ring-2 ring-white dark:ring-darkcard"></span>
+                <!-- Mobile Menu Toggle (hidden for desktop) -->
+                <button class="md:hidden p-2 rounded-md text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-colors duration-200">
+                    <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <!-- Hero Section -->
+        <section id="home" class="relative bg-gradient-to-br from-primary-600 to-primary-800 dark:from-primary-800 dark:to-primary-900 text-white py-20 md:py-32 overflow-hidden">
+            <div class="container mx-auto text-center px-6 relative z-10">
+                <h1 class="text-4xl md:text-6xl font-extrabold mb-6 animate-fade-in-up">
+                    Build Your AI Apps. Faster. Smarter.
+                </h1>
+                <p class="text-xl md:text-2xl mb-10 max-w-3xl mx-auto opacity-90 animate-fade-in-up delay-200">
+                    Unleash the power of AI without complex setups. The AI App Builder provides the tools to design, develop, and deploy intelligent applications across platforms.
+                </p>
+                <div class="flex flex-col sm:flex-row justify-center space-y-4 sm:space-y-0 sm:space-x-4 animate-fade-in-up delay-400">
+                    <a href="#features" class="bg-white text-primary-700 px-8 py-4 rounded-full text-lg font-semibold hover:bg-gray-100 transition-transform transform hover:-translate-y-1 shadow-lg dark:bg-primary-300 dark:text-primary-900 dark:hover:bg-primary-400">
+                        Start Building Now
+                    </a>
+                    <a href="https://github.com/pradeepprasannapc-blip/ai-app-builder" target="_blank" rel="noopener noreferrer" class="bg-transparent border-2 border-white text-white px-8 py-4 rounded-full text-lg font-semibold hover:bg-white hover:text-primary-700 transition-transform transform hover:-translate-y-1 shadow-lg dark:hover:bg-primary-300 dark:hover:text-primary-900">
+                        View on GitHub
+                    </a>
                 </div>
             </div>
-        </header>
+        </section>
 
-        <!-- Main Content Area -->
-        <main class="flex-1 p-6 md:p-8 overflow-y-auto">
-            <div class="max-w-7xl mx-auto">
-                <h2 class="text-3xl md:text-4xl font-extrabold text-gray-900 dark:text-gray-50 mb-8 leading-tight">AI Trading Overview</h2>
-
-                <!-- Overview Cards -->
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                    <div class="bg-lightcard dark:bg-darkcard rounded-xl shadow-lg dark:shadow-xl p-6 transition-colors duration-300 transform hover:scale-105 hover:shadow-2xl duration-200 ease-in-out border border-transparent hover:border-primary">
-                        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Current Balance</p>
-                        <p class="text-3xl font-bold text-gray-900 dark:text-gray-50 mt-1">$25,321.45</p>
-                        <p class="text-sm text-green-500 dark:text-green-400 flex items-center mt-2">
-                            <svg class="h-4 w-4 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M5.293 9.707a1 1 0 010-1.414L10 3.586l4.707 4.707a1 1 0 01-1.414 1.414L11 6.414V16a1 1 0 11-2 0V6.414L6.707 9.707a1 1 0 01-1.414 0z" clip-rule="evenodd"></path></svg>
-                            +2.5% Today
+        <!-- Features Section -->
+        <section id="features" class="py-16 md:py-24 bg-gray-100 dark:bg-gray-800 transition-colors duration-300">
+            <div class="container mx-auto px-6 text-center">
+                <h2 class="text-4xl font-bold mb-12 text-gray-800 dark:text-darkText">How It Works: Seamless AI Integration</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-10">
+                    <!-- Feature 1: Define AI Skills (Ref: `skills` folder) -->
+                    <div class="card bg-white dark:bg-darkCard p-8 rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300">
+                        <div class="flex justify-center mb-6">
+                            <div class="p-4 rounded-full bg-primary-100 dark:bg-primary-700 text-primary-600 dark:text-primary-200">
+                                <svg class="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                </svg>
+                            </div>
+                        </div>
+                        <h3 class="text-2xl font-semibold mb-4 text-gray-800 dark:text-darkText">Define AI Skills</h3>
+                        <p class="text-gray-600 dark:text-gray-300">
+                            Leverage pre-built AI "skills" or define your own custom capabilities to empower your applications.
+                            <br><span class="text-sm italic opacity-80">(Referencing `skills` folder)</span>
                         </p>
                     </div>
-
-                    <div class="bg-lightcard dark:bg-darkcard rounded-xl shadow-lg dark:shadow-xl p-6 transition-colors duration-300 transform hover:scale-105 hover:shadow-2xl duration-200 ease-in-out border border-transparent hover:border-primary">
-                        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Today's P/L</p>
-                        <p class="text-3xl font-bold text-green-600 dark:text-green-400 mt-1">+$624.12</p>
-                        <p class="text-sm text-gray-500 dark:text-gray-400 mt-2">from 5 trades</p>
-                    </div>
-
-                    <div class="bg-lightcard dark:bg-darkcard rounded-xl shadow-lg dark:shadow-xl p-6 transition-colors duration-300 transform hover:scale-105 hover:shadow-2xl duration-200 ease-in-out border border-transparent hover:border-primary">
-                        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Active Trades</p>
-                        <p class="text-3xl font-bold text-gray-900 dark:text-gray-50 mt-1">7</p>
-                        <p class="text-sm text-yellow-500 dark:text-yellow-400 flex items-center mt-2">
-                            <svg class="h-4 w-4 mr-1" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l3 3a1 1 0 001.414-1.414L11 10.586V6z" clip-rule="evenodd"></path></svg>
-                            Monitoring
+                    <!-- Feature 2: Configure & Connect (Ref: `openclaw-onboarding`) -->
+                    <div class="card bg-white dark:bg-darkCard p-8 rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300">
+                        <div class="flex justify-center mb-6">
+                            <div class="p-4 rounded-full bg-secondary-100 dark:bg-secondary-700 text-secondary-600 dark:text-secondary-200">
+                                <svg class="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z" />
+                                </svg>
+                            </div>
+                        </div>
+                        <h3 class="text-2xl font-semibold mb-4 text-gray-800 dark:text-darkText">Configure & Connect</h3>
+                        <p class="text-gray-600 dark:text-gray-300">
+                            Easily configure your chosen AI components and connect them to build complex workflows.
+                            <br><span class="text-sm italic opacity-80">(Referencing `openclaw-onboarding`)</span>
                         </p>
                     </div>
-
-                    <div class="bg-lightcard dark:bg-darkcard rounded-xl shadow-lg dark:shadow-xl p-6 transition-colors duration-300 transform hover:scale-105 hover:shadow-2xl duration-200 ease-in-out border border-transparent hover:border-primary">
-                        <p class="text-sm font-medium text-gray-500 dark:text-gray-400">Winning Rate</p>
-                        <p class="text-3xl font-bold text-primary mt-1">78%</p>
-                        <p class="text-sm text-gray-500 dark:text-gray-400 mt-2">Past 30 days</p>
-                    </div>
-                </div>
-
-                <!-- Charts & Recent Activity Section -->
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div class="lg:col-span-2 bg-lightcard dark:bg-darkcard rounded-xl shadow-lg dark:shadow-xl p-6 transition-colors duration-300">
-                        <h3 class="text-xl font-semibold text-gray-800 dark:text-gray-50 mb-4">Portfolio Performance</h3>
-                        <div class="h-80 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center text-gray-400 dark:text-gray-500 text-lg border border-dashed border-gray-300 dark:border-gray-600">
-                            [Advanced Chart Integration Here - e.g., TradingView Widget, Chart.js, D3.js]
+                    <!-- Feature 3: Generate & Deploy (Ref: `app.py`, SDKs) -->
+                    <div class="card bg-white dark:bg-darkCard p-8 rounded-xl shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300">
+                        <div class="flex justify-center mb-6">
+                            <div class="p-4 rounded-full bg-primary-100 dark:bg-primary-700 text-primary-600 dark:text-primary-200">
+                                <svg class="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                                </svg>
+                            </div>
                         </div>
-                        <div class="mt-4 flex flex-wrap gap-2 text-sm">
-                            <span class="px-3 py-1 bg-primary/10 text-primary rounded-full dark:bg-primary/20">All Time</span>
-                            <span class="px-3 py-1 bg-gray-100 text-gray-600 rounded-full dark:bg-gray-700 dark:text-gray-300 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">1Y</span>
-                            <span class="px-3 py-1 bg-gray-100 text-gray-600 rounded-full dark:bg-gray-700 dark:text-gray-300 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">6M</span>
-                            <span class="px-3 py-1 bg-gray-100 text-gray-600 rounded-full dark:bg-gray-700 dark:text-gray-300 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">1M</span>
-                            <span class="px-3 py-1 bg-gray-100 text-gray-600 rounded-full dark:bg-gray-700 dark:text-gray-300 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors">1D</span>
-                        </div>
-                    </div>
-
-                    <div class="bg-lightcard dark:bg-darkcard rounded-xl shadow-lg dark:shadow-xl p-6 transition-colors duration-300">
-                        <h3 class="text-xl font-semibold text-gray-800 dark:text-gray-50 mb-4">Recent Activity</h3>
-                        <ul class="space-y-4">
-                            <li class="flex justify-between items-center text-sm p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                                <div class="flex items-center space-x-3">
-                                    <span class="inline-flex items-center justify-center h-8 w-8 rounded-full bg-green-100 dark:bg-green-700 text-green-700 dark:text-green-100 flex-shrink-0">
-                                        <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.707l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13a1 1 0 102 0V9.414l1.293 1.293a1 1 0 001.414-1.414z" clip-rule="evenodd"></path></svg>
-                                    </span>
-                                    <div>
-                                        <p class="font-medium text-gray-900 dark:text-gray-50">BUY BTC</p>
-                                        <p class="text-gray-500 dark:text-gray-400">0.05 BTC @ $30,000</p>
-                                    </div>
-                                </div>
-                                <span class="text-green-600 dark:text-green-400 font-bold">+$1,500</span>
-                            </li>
-                            <li class="flex justify-between items-center text-sm p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                                <div class="flex items-center space-x-3">
-                                    <span class="inline-flex items-center justify-center h-8 w-8 rounded-full bg-red-100 dark:bg-red-700 text-red-700 dark:text-red-100 flex-shrink-0">
-                                        <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.707l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 101.414 1.414L9 9.414V13a1 1 0 102 0V9.414l1.293 1.293a1 1 0 001.414-1.414z" clip-rule="evenodd" transform="rotate(180 10 10)"></path></svg>
-                                    </span>
-                                    <div>
-                                        <p class="font-medium text-gray-900 dark:text-gray-50">SELL ETH</p>
-                                        <p class="text-gray-500 dark:text-gray-400">0.8 ETH @ $1,800</p>
-                                    </div>
-                                </div>
-                                <span class="text-red-600 dark:text-red-400 font-bold">-$1,440</span>
-                            </li>
-                            <li class="flex justify-between items-center text-sm p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                                <div class="flex items-center space-x-3">
-                                    <span class="inline-flex items-center justify-center h-8 w-8 rounded-full bg-blue-100 dark:bg-blue-700 text-blue-700 dark:text-blue-100 flex-shrink-0">
-                                        <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4 4a2 2 0 00-2 2v4a2 2 0 002 2V6h10a2 2 0 012 2v4a2 2 0 002 2v-4a2 2 0 00-2-2H4V4zm3 1h2v2H7V5zm3 0h2v2h-2V5z" clip-rule="evenodd"></path></svg>
-                                    </span>
-                                    <div>
-                                        <p class="font-medium text-gray-900 dark:text-gray-50">Deposit</p>
-                                        <p class="text-gray-500 dark:text-gray-400">Bank Transfer</p>
-                                    </div>
-                                </div>
-                                <span class="text-blue-600 dark:text-blue-400 font-bold">+$5,000</span>
-                            </li>
-                            <li class="flex justify-between items-center text-sm p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                                <div class="flex items-center space-x-3">
-                                    <span class="inline-flex items-center justify-center h-8 w-8 rounded-full bg-yellow-100 dark:bg-yellow-700 text-yellow-700 dark:text-yellow-100 flex-shrink-0">
-                                        <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                    </span>
-                                    <div>
-                                        <p class="font-medium text-gray-900 dark:text-gray-50">Trade Closed</p>
-                                        <p class="text-gray-500 dark:text-gray-400">AAPL Short</p>
-                                    </div>
-                                </div>
-                                <span class="text-secondary dark:text-secondary font-bold">+$230</span>
-                            </li>
-                        </ul>
-                        <button class="mt-6 w-full py-3 px-4 border border-transparent rounded-lg shadow-md text-base font-medium text-white bg-primary hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary dark:ring-offset-darkcard transition-all duration-200">
-                            View All Activity
-                        </button>
+                        <h3 class="text-2xl font-semibold mb-4 text-gray-800 dark:text-darkText">Generate & Deploy</h3>
+                        <p class="text-gray-600 dark:text-gray-300">
+                            Generate production-ready code for various platforms or deploy your AI app directly with ease.
+                            <br><span class="text-sm italic opacity-80">(Referencing `app.py`, `SDKs` folders)</span>
+                        </p>
                     </div>
                 </div>
             </div>
-        </main>
+        </section>
 
-        <!-- Footer -->
-        <footer class="bg-lightcard dark:bg-darkcard p-4 text-center text-gray-500 dark:text-gray-400 text-sm shadow-inner dark:shadow-none transition-colors duration-300">
-            &copy; 2023 AI Trading Blip. සියලුම හිමිකම් ඇවිරිණි. Crafted by Pradeep Prasanna.
-        </footer>
-    </div>
+        <!-- Examples Section -->
+        <section id="examples" class="py-16 md:py-24 bg-white dark:bg-darkBg transition-colors duration-300">
+            <div class="container mx-auto px-6 text-center">
+                <h2 class="text-4xl font-bold mb-12 text-gray-800 dark:text-darkText">Real-World AI Applications Built with Us</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                    <!-- Example 1 -->
+                    <div class="card bg-gray-50 dark:bg-darkCard p-6 rounded-lg shadow-md hover:shadow-xl transition-all duration-300">
+                        <img src="https://via.placeholder.com/400x250/38BDF8/FFFFFF?text=Chatbot+Example" alt="AI Chatbot Example" class="rounded-lg mb-4 w-full h-48 object-cover">
+                        <h3 class="text-xl font-semibold mb-2 text-gray-800 dark:text-darkText">Smart Customer Service Chatbot</h3>
+                        <p class="text-gray-600 dark:text-gray-300 text-sm">Automate support with an intelligent, conversational AI. Integrates seamlessly with existing platforms.</p>
+                        <a href="https://github.com/pradeepprasannapc-blip/ai-app-builder/tree/main/apps-examples" target="_blank" rel="noopener noreferrer" class="mt-4 inline-block text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 font-medium">Learn More &rarr;</a>
+                    </div>
+                    <!-- Example 2 -->
+                    <div class="card bg-gray-50 dark:bg-darkCard p-6 rounded-lg shadow-md hover:shadow-xl transition-all duration-300">
+                        <img src="https://via.placeholder.com/400x250/DB2777/FFFFFF?text=Content+Generator" alt="AI Content Generator Example" class="rounded-lg mb-4 w-full h-48 object-cover">
+                        <h3 class="text-xl font-semibold mb-2 text-gray-800 dark:text-darkText">Automated Content Generation</h3>
+                        <p class="text-gray-600 dark:text-gray-300 text-sm">Generate engaging articles, marketing copy, or code snippets with state-of-the-art AI models.</p>
+                        <a href="https://github.com/pradeepprasannapc-blip/ai-app-builder/tree/main/apps-examples" target="_blank" rel="noopener noreferrer" class="mt-4 inline-block text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 font-medium">Learn More &rarr;</a>
+                    </div>
+                    <!-- Example 3 -->
+                    <div class="card bg-gray-50 dark:bg-darkCard p-6 rounded-lg shadow-md hover:shadow-xl transition-all duration-300">
+                        <img src="https://via.placeholder.com/400x250/0EA5E9/FFFFFF?text=Image+Recognition" alt="AI Image Recognition Example" class="rounded-lg mb-4 w-full h-48 object-cover">
+                        <h3 class="text-xl font-semibold mb-2 text-gray-800 dark:text-darkText">Advanced Image Recognition</h3>
+                        <p class="text-gray-600 dark:text-gray-300 text-sm">Build vision-powered apps for object detection, facial recognition, and image analysis.</p>
+                        <a href="https://github.com/pradeepprasannapc-blip/ai-app-builder/tree/main/apps-examples" target="_blank" rel="noopener noreferrer" class="mt-4 inline-block text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300 font-medium">Learn More &rarr;</a>
+                    </div>
+                </div>
+            </div>
+        </section>
 
+        <!-- SDKs Section -->
+        <section id="sdks" class="py-16 md:py-24 bg-gray-100 dark:bg-gray-800 transition-colors duration-300">
+            <div class="container mx-auto px-6 text-center">
+                <h2 class="text-4xl font-bold mb-12 text-gray-800 dark:text-darkText">Seamless Integration with Your Favorite Platforms</h2>
+                <p class="text-xl text-gray-600 dark:text-gray-300 mb-10 max-w-2xl mx-auto">
+                    Our powerful SDKs ensure your AI applications run smoothly, no matter your development environment.
+                </p>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+                    <div class="card bg-white dark:bg-darkCard p-8 rounded-xl shadow-lg flex flex-col items-center justify-center transition-all duration-300 hover:scale-105 hover:shadow-xl">
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/9/99/Unofficial_JavaScript_logo_2.svg" alt="JavaScript SDK" class="h-20 mb-4">
+                        <h3 class="text-2xl font-semibold mb-2 text-gray-800 dark:text-darkText">JavaScript SDK</h3>
+                        <p class="text-gray-600 dark:text-gray-300 text-center">Develop web and Node.js applications with ease.</p>
+                    </div>
+                    <div class="card bg-white dark:bg-darkCard p-8 rounded-xl shadow-lg flex flex-col items-center justify-center transition-all duration-300 hover:scale-105 hover:shadow-xl">
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/0/06/Kotlin_Icon.svg" alt="Kotlin SDK" class="h-20 mb-4">
+                        <h3 class="text-2xl font-semibold mb-2 text-gray-800 dark:text-darkText">Kotlin SDK</h3>
+                        <p class="text-gray-600 dark:text-gray-300 text-center">Build robust Android and backend applications.</p>
+                    </div>
+                    <div class="card bg-white dark:bg-darkCard p-8 rounded-xl shadow-lg flex flex-col items-center justify-center transition-all duration-300 hover:scale-105 hover:shadow-xl">
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/e/ea/Swift_logo.svg" alt="Swift SDK" class="h-20 mb-4">
+                        <h3 class="text-2xl font-semibold mb-2 text-gray-800 dark:text-darkText">Swift SDK</h3>
+                        <p class="text-gray-600 dark:text-gray-300 text-center">Create powerful iOS and macOS applications.</p>
+                    </div>
+                </div>
+                <p class="mt-12 text-lg text-gray-700 dark:text-gray-200">
+                    <a href="https://github.com/pradeepprasannapc-blip/ai-app-builder/tree/main/javascript-sdk" target="_blank" rel="noopener noreferrer" class="text-primary-600 hover:underline dark:text-primary-400">Explore our SDKs</a> and start building today!
+                </p>
+            </div>
+        </section>
+
+        <!-- Call to Action Section -->
+        <section class="py-16 md:py-24 bg-gradient-to-br from-primary-500 to-primary-700 dark:from-primary-700 dark:to-primary-900 text-white text-center">
+            <div class="container mx-auto px-6">
+                <h2 class="text-4xl md:text-5xl font-extrabold mb-6">Ready to Transform Your Ideas into AI Reality?</h2>
+                <p class="text-xl md:text-2xl mb-10 max-w-3xl mx-auto opacity-90">
+                    Join the community of developers building the next generation of intelligent applications.
+                </p>
+                <a href="https://github.com/pradeepprasannapc-blip/ai-app-builder" target="_blank" rel="noopener noreferrer" class="bg-white text-primary-700 px-10 py-5 rounded-full text-xl font-semibold hover:bg-gray-100 transition-transform transform hover:-translate-y-1 shadow-xl dark:bg-primary-300 dark:text-primary-900 dark:hover:bg-primary-400">
+                    Get Started on GitHub
+                </a>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-gray-800 dark:bg-gray-900 text-gray-300 py-10 transition-colors duration-300">
+        <div class="container mx-auto px-6 text-center">
+            <div class="mb-8">
+                <a href="#" class="flex items-center justify-center space-x-2 mb-4">
+                    <svg class="h-8 w-8 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                    </svg>
+                    <span class="text-2xl font-bold text-white">AI App Builder</span>
+                </a>
+                <p class="max-w-md mx-auto text-gray-400">
+                    Empowering developers to build intelligent applications with efficiency and flexibility.
+                </p>
+            </div>
+            <div class="flex justify-center space-x-6 mb-8">
+                <a href="#home" class="hover:text-white transition-colors duration-200">Home</a>
+                <a href="#features" class="hover:text-white transition-colors duration-200">Features</a>
+                <a href="#examples" class="hover:text-white transition-colors duration-200">Examples</a>
+                <a href="#sdks" class="hover:text-white transition-colors duration-200">SDKs</a>
+                <a href="https://github.com/pradeepprasannapc-blip/ai-app-builder" target="_blank" rel="noopener noreferrer" class="hover:text-white transition-colors duration-200">GitHub</a>
+            </div>
+            <div class="border-t border-gray-700 pt-8 text-sm text-gray-500">
+                &copy; 2023 AI App Builder. All rights reserved. Made with ❤️ by a Premium UI Developer.
+            </div>
+        </div>
+    </footer>
+
+    <!-- Scroll to Top Button -->
+    <button id="scrollToTopBtn" class="bg-primary-600 hover:bg-primary-700 text-white dark:bg-primary-500 dark:hover:bg-primary-600 shadow-lg transition-colors duration-300">
+        <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 10l7-7m0 0l7 7m-7-7v18" />
+        </svg>
+    </button>
+
+    <!-- JavaScript for Dark Mode Toggle and Scroll-to-Top -->
     <script>
         const darkModeToggle = document.getElementById('darkModeToggle');
         const htmlElement = document.documentElement;
         const sunIcon = document.getElementById('sunIcon');
         const moonIcon = document.getElementById('moonIcon');
 
-        // Function to set theme
-        function setTheme(theme) {
-            if (theme === 'dark') {
+        // Check local storage for theme preference or system preference
+        function updateThemeFromPreference() {
+            if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
                 htmlElement.classList.add('dark');
-                sunIcon.classList.remove('hidden');
-                moonIcon.classList.add('hidden');
-                localStorage.theme = 'dark';
+                sunIcon.classList.add('hidden');
+                moonIcon.classList.remove('hidden');
             } else {
                 htmlElement.classList.remove('dark');
-                moonIcon.classList.remove('hidden');
-                sunIcon.classList.add('hidden');
-                localStorage.theme = 'light';
+                sunIcon.classList.remove('hidden');
+                moonIcon.classList.add('hidden');
             }
         }
 
-        // Initialize theme on page load
-        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)');
-        if (localStorage.theme === 'dark' || (!('theme' in localStorage) && prefersDark.matches)) {
-            setTheme('dark');
-        } else {
-            setTheme('light');
-        }
+        // Apply theme on initial load
+        updateThemeFromPreference();
 
-        // Listen for system theme changes
-        prefersDark.addEventListener('change', (event) => {
-            if (!('theme' in localStorage)) { // Only apply if user hasn't manually set a theme
-                setTheme(event.matches ? 'dark' : 'light');
-            }
-        });
-
-        // Toggle theme on button click
         darkModeToggle.addEventListener('click', () => {
             if (htmlElement.classList.contains('dark')) {
-                setTheme('light');
+                htmlElement.classList.remove('dark');
+                localStorage.theme = 'light';
             } else {
-                setTheme('dark');
+                htmlElement.classList.add('dark');
+                localStorage.theme = 'dark';
             }
+            updateThemeFromPreference(); // Update icons after toggle
         });
+
+        // Smooth scrolling for navigation links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                document.querySelector(this.getAttribute('href')).scrollIntoView({
+                    behavior: 'smooth'
+                });
+            });
+        });
+
+        // Scroll to Top Button functionality
+        const scrollToTopBtn = document.getElementById("scrollToTopBtn");
+
+        // When the user scrolls down 100px from the top of the document, show the button
+        window.onscroll = function() { scrollFunction() };
+
+        function scrollFunction() {
+            if (document.body.scrollTop > 100 || document.documentElement.scrollTop > 100) {
+                scrollToTopBtn.style.display = "block";
+            } else {
+                scrollToTopBtn.style.display = "none";
+            }
+        }
+
+        // When the user clicks on the button, scroll to the top of the document
+        scrollToTopBtn.addEventListener('click', () => {
+            document.body.scrollTop = 0; // For Safari
+            document.documentElement.scrollTop = 0; // For Chrome, Firefox, IE and Opera
+        });
+
     </script>
 </body>
 </html>
