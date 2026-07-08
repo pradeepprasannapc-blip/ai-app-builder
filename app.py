@@ -1,7 +1,6 @@
 import streamlit as st
 import google.generativeai as genai
 import streamlit.components.v1 as components
-import re
 import requests
 import base64
 import time
@@ -48,7 +47,7 @@ with st.sidebar:
     if login_method == "OAuth Login (Browser)":
         if "code" in st.query_params and not st.session_state.github_token:
             auth_code = st.query_params["code"]
-            token_url = "https://github.com/login/oauth/access_token"
+            token_url = "[https://github.com/login/oauth/access_token](https://github.com/login/oauth/access_token)"
             headers = {"Accept": "application/json"}
             data = {"client_id": client_id, "client_secret": client_secret, "code": auth_code}
             res = requests.post(token_url, headers=headers, data=data).json()
@@ -58,8 +57,7 @@ with st.sidebar:
                 st.rerun()
         
         if not st.session_state.github_token:
-            auth_url = f"https://github.com/login/oauth/authorize?client_id={client_id}&scope=repo%20workflow"
-            # 💡 FIX: iframe Security Issue විසඳීම සඳහා target="_blank" යෙදීම
+            auth_url = f"[https://github.com/login/oauth/authorize?client_id=](https://github.com/login/oauth/authorize?client_id=){client_id}&scope=repo%20workflow"
             st.markdown(f"""
                 <a href="{auth_url}" target="_blank" style="text-decoration: none;">
                     <div style="background: linear-gradient(45deg, #4f46e5, #06b6d4); color: white; padding: 10px 24px; border-radius: 8px; text-align: center; font-weight: bold; margin-bottom: 10px;">
@@ -87,7 +85,7 @@ with st.sidebar:
         with st.spinner("Repositories ගෙන එමින්..."):
             try:
                 repo_headers = {"Authorization": f"token {github_token}", "Accept": "application/vnd.github.v3+json"}
-                repos_res = requests.get("https://api.github.com/user/repos?sort=updated&per_page=50", headers=repo_headers)
+                repos_res = requests.get("[https://api.github.com/user/repos?sort=updated&per_page=50](https://api.github.com/user/repos?sort=updated&per_page=50)", headers=repo_headers)
                 if repos_res.status_code == 200:
                     repo_list = [r["full_name"] for r in repos_res.json()]
                     if repo_list:
@@ -125,9 +123,9 @@ with tab3:
         with st.spinner("GitHub Repository එක ගැඹුරින් පරීක්ෂා කරමින් පවතී..."):
             try:
                 clean_input = github_input.strip()
-                repo_path = clean_input.split("github.com/")[-1].rstrip("/") if "github.com/" in clean_input else clean_input.rstrip("/")
+                repo_path = clean_input.split("[github.com/](https://github.com/)")[-1].rstrip("/") if "[github.com/](https://github.com/)" in clean_input else clean_input.rstrip("/")
                 
-                repo_api_url = f"https://api.github.com/repos/{repo_path}/contents"
+                repo_api_url = f"[https://api.github.com/repos/](https://api.github.com/repos/){repo_path}/contents"
                 res = requests.get(repo_api_url, headers={"User-Agent": "Mozilla/5.0"})
                 
                 if res.status_code == 200:
@@ -153,7 +151,7 @@ with tab3:
                 user_context = f"GitHub Repo: {github_input}"
                 source_info = "GitHub Fallback"
 
-# --- 4. ENGINE START (ADVANCED FULL-STACK PROMPT & FOOL-PROOF EXTRACTOR) ---
+# --- 4. ENGINE START (BULLETPROOF CODE EXTRACTOR) ---
 if st.button("🚀 GENERATE MASTER APP", use_container_width=True):
     if not gemini_key:
         st.error("👈 කරුණාකර ප්‍රථමයෙන් Gemini API Key එක ලබා දෙන්න.")
@@ -174,23 +172,26 @@ if st.button("🚀 GENERATE MASTER APP", use_container_width=True):
                 1. Premium UI: Tailwind CSS භාවිතයෙන් අතිශය නවීන, ආකර්ෂණීය Dark Mode UI එකක් සාදන්න. Glassmorphism, Box Shadows සහ Smooth CSS animations භාවිතා කරන්න.
                 2. Real Functionality: කේතයේ ඇති බොත්තම්, Side menus, සහ Bottom Navigation අනිවාර්යයෙන්ම වැඩ කළ යුතුය. JavaScript භාවිතයෙන් පිටු අතර (Sections) මාරු වීම සකසන්න (Hide/Show divs).
                 3. Business Logic: යෙදුමේ ප්‍රධාන කාර්යයන් සඳහා අවශ්‍ය JavaScript Logic (උදා: Forms submit වීම, ගණනය කිරීම්, දත්ත පෙන්නුම් කිරීම) අනිවාර්යයෙන්ම ලියන්න.
-                4. Data Storage: API සම්බන්ධතා නොමැති තැන් වලදී දත්ත අහිමි නොවීම සඳහා LocalStorage භාවිතා කර දත්ත Save සහ Load වීමට සකසන්න. 
+                4. Data Storage: LocalStorage භාවිතා කර දත්ත Save සහ Load වීමට සකසන්න. 
                 5. Font & Icons: Google Fonts (Poppins) සහ FontAwesome icons භාවිතා කරන්න.
                 
-                කිසිදු පැහැදිලි කිරීමක් අවශ්‍ය නැත. සම්පූර්ණ HTML, CSS (Tailwind), සහ අදාළ සියලුම JavaScript කේතයන් එකම කේතයක් ලෙස ```html සහ ``` අතර පමණක් ලබා දෙන්න."""
+                කිසිදු පැහැදිලි කිරීමක් අවශ්‍ය නැත. ඔබ ලබා දෙන කේතය කිසිම විටෙක ```html හෝ වෙනත් markdown tags වලින් wrap කරන්න එපා. කේතය කෙලින්ම <!DOCTYPE html> වලින් ආරම්භ කර </html> වලින් අවසන් කරන්න."""
                 
                 response = model.generate_content(master_prompt)
                 
-                raw_text = response.text
-                if re.search(r'```html', raw_text, re.IGNORECASE):
-                    raw_text = re.split(r'```html', raw_text, flags=re.IGNORECASE)[1]
-                elif "```" in raw_text:
-                    raw_text = raw_text.split("```", 1)[1]
+                # 💡 FIX: Bulletproof Extractor
+                raw_code = response.text.strip()
                 
-                if "```" in raw_text:
-                    raw_text = raw_text.split("```")[0]
+                # AI එක යම් හෙයකින් markdown භාවිතා කර තිබුණොත් එය ආරක්ෂිතව ඉවත් කිරීම
+                if raw_code.lower().startswith("```html"):
+                    raw_code = raw_code[7:].strip()
+                elif raw_code.startswith("```"):
+                    raw_code = raw_code[3:].strip()
+                
+                if raw_code.endswith("```"):
+                    raw_code = raw_code[:-3].strip()
                     
-                st.session_state.app_code = raw_text.strip()
+                st.session_state.app_code = raw_code
                 st.session_state.apk_url = None
                 st.rerun()
             except Exception as e:
@@ -218,14 +219,14 @@ if st.session_state.app_code:
         else:
             headers = {"Authorization": f"token {github_token}", "Accept": "application/vnd.github.v3+json"}
             
-            wf_url = f"https://api.github.com/repos/{github_repo}/contents/.github/workflows/build.yml"
+            wf_url = f"[https://api.github.com/repos/](https://api.github.com/repos/){github_repo}/contents/.github/workflows/build.yml"
             wf_check = requests.get(wf_url, headers=headers)
             if wf_check.status_code != 200:
                 yaml_content = """name: Build Android APK\non:\n  push:\n    branches: [ main ]\n  workflow_dispatch:\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n    - uses: actions/checkout@v3\n    - uses: actions/setup-node@v3\n      with:\n        node-version: 18\n    - run: npm install -g cordova\n    - run: |\n        cordova create myapp com.premium.aifactory AI_App\n        cd myapp\n        cordova platform add android\n        rm www/index.html\n        cp ../index.html www/index.html\n    - uses: actions/setup-java@v3\n      with:\n        distribution: 'zulu'\n        java-version: '17'\n    - uses: android-actions/setup-android@v3\n    - run: |\n        cd myapp\n        cordova build android --no-telemetry\n    - uses: actions/upload-artifact@v4\n      with:\n        name: premium-app-apk\n        path: myapp/platforms/android/app/build/outputs/apk/debug/app-debug.apk"""
                 wf_payload = {"message": "Auto-setup Cloud Build Workflow", "content": base64.b64encode(yaml_content.encode('utf-8')).decode('utf-8')}
                 requests.put(wf_url, headers=headers, json=wf_payload)
             
-            file_url = f"https://api.github.com/repos/{github_repo}/contents/index.html"
+            file_url = f"[https://api.github.com/repos/](https://api.github.com/repos/){github_repo}/contents/index.html"
             sha = ""
             get_res = requests.get(file_url, headers=headers)
             if get_res.status_code == 200: sha = get_res.json()['sha']
@@ -248,7 +249,7 @@ if st.session_state.app_code:
         
         if st.button("🔄 තත්ත්වය පරීක්ෂා කරන්න (Check Status)", use_container_width=True):
             headers = {"Authorization": f"token {github_token}", "Accept": "application/vnd.github.v3+json"}
-            runs_url = f"https://api.github.com/repos/{github_repo}/actions/runs"
+            runs_url = f"[https://api.github.com/repos/](https://api.github.com/repos/){github_repo}/actions/runs"
             
             try:
                 run_res = requests.get(runs_url, headers=headers).json()
@@ -267,7 +268,7 @@ if st.session_state.app_code:
                             if artifact_res.get("artifacts"):
                                 art_id = artifact_res["artifacts"][0]["id"]
                                 run_id = latest_run["id"] 
-                                st.session_state.apk_url = f"https://github.com/{github_repo}/actions/runs/{run_id}/artifacts/{art_id}"
+                                st.session_state.apk_url = f"[https://github.com/](https://github.com/){github_repo}/actions/runs/{run_id}/artifacts/{art_id}"
                             else:
                                 st.error("⚠️ APK ෆයිල් එක සොයාගත නොහැක.")
                         else:
