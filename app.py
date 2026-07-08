@@ -110,16 +110,25 @@ if st.button("🚀 GENERATE MASTER APP", use_container_width=True):
                 model = genai.GenerativeModel(selected_model)
                 
                 master_prompt = f"""
-                ඔබ ලෝකයේ සිටින අති දක්ෂතම Full-Stack Mobile App UX Designer සහ Developer කෙනෙක්.
-                මූලාශ්‍රය: {source_info}
-                විස්තරය: {user_context}
+                ඔබ ලෝකයේ සිටින අති දක්ෂතම 'Premium Mobile App UI/UX Designer' සහ 'Frontend Developer' කෙනෙක්. Base44 වැනි ලෝක මට්ටමේ SaaS පද්ධති වල UI නිර්මාණය කිරීම ඔබේ විශේෂත්වයයි.
                 
-                කරුණාකර පහත පියවර 2 ලස්සනට සිදුකර දෙන්න:
-                1. මෙම ඇප් එක ක්‍රියා කරන ආකාරය සහ එහි අඩංගු විශේෂාංග මොනවාදැයි කෙටියෙන් සිංහලෙන් පැහැදිලි කරන්න.
-                2. සම්පූර්ණ ඇප් එක සඳහා තනි HTML ගොනුවක් (Single HTML file) සාදන්න. එහි UI එක සඳහා අනිවාර්යයෙන්ම 'Tailwind CSS' භාවිතා කරන්න. එය අතිශය ආකර්ෂණීය, Dark mode සහිත, Mobile-responsive (ජංගම දුරකථන වලට ගැළපෙන) එකක් විය යුතුය. අවශ්‍ය නම් JavaScript ද ඊටම ඇතුළත් කරන්න.
+                පරිශීලකයාගේ ඉල්ලීම: {user_input}
                 
-                වැදගත්: ඔබගේ කේතය (Code) අනිවාර්යයෙන්ම ```html සහ ``` යන සලකුණු අතර පමණක් ලබා දෙන්න.
+                කරුණාකර පහත දැඩි නීතිරීති වලට අනුව සම්පූර්ණ ඇප් එක (Single HTML file) සාදන්න:
+                
+                1. **UI Framework:** අනිවාර්යයෙන්ම Tailwind CSS (CDN හරහා) භාවිතා කරන්න. (`<script src="https://cdn.tailwindcss.com"></script>`)
+                2. **Design Language (Premium Look):** - සම්පූර්ණයෙන්ම නවීන Dark Mode එකක් භාවිතා කරන්න (උදා: bg-slate-900).
+                   - Base44 හි මෙන් Glassmorphism effects (backdrop-blur, bg-white/10) භාවිතා කරන්න.
+                   - බටන් සහ වැදගත් කොටස් සඳහා Neon/Gradients (උදා: bg-gradient-to-r from-cyan-500 to-blue-500) භාවිතා කරන්න.
+                   - Soft shadows සහ rounded-2xl/rounded-3xl borders අනිවාර්ය වේ.
+                3. **Typography & Icons:** 'Poppins' හෝ 'Inter' Google Font එක සහ FontAwesome අයිකන භාවිතා කරන්න.
+                4. **Responsiveness:** ජංගම දුරකථන (Mobile-first) සඳහා 100% ක් ගැළපෙන සේ UI එක නිර්මාණය කරන්න. (Bottom navigation bar එකක් අවශ්‍ය නම් එකතු කරන්න).
+                5. **Interactivity:** ලස්සන Hover effects සහ සිනිඳු Animations ඇතුළත් කරන්න. අවශ්‍ය JavaScript කේතයද HTML ගොනුවටම (script tag තුළ) ඇතුළත් කරන්න.
+
+                ඉතා වැදගත්: 
+                - කේතය (Code) පමණක් ```html සහ ``` යන සලකුණු අතර ලබා දෙන්න. වෙනත් කිසිදු අමතර විස්තරයක් කේතය තුළට නොදාන්න.
                 """
+
                 
                 response = model.generate_content(master_prompt)
                 full_text = response.text
