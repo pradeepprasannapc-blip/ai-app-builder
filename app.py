@@ -209,40 +209,62 @@ if st.session_state.app_code:
     # --- 7. LIVE COMPILER TRACKER (BUG FIXED) ---
     if st.session_state.build_running:
         with st.status("🛠️ Cloud Build එක සිදුවෙමින් පවතී...", expanded=True) as status:
-            for log in st.session_state.build_log: status.write(log)
+            for log in st.session_state.build_log: 
+                status.write(log)
+            
+            # Live status text එක පෙන්වීමට Placeholder එකක්
+            status_placeholder = st.empty() 
+            
             headers = {"Authorization": f"token {github_token}", "Accept": "application/vnd.github.v3+json"}
             runs_url = f"https://api.github.com/repos/{github_repo}/actions/runs"
             
+            # GitHub එකට Action එක register වෙන්න තත්පර කිහිපයක් ලබා දීම
+            time.sleep(3) 
+            
             try:
-                run_res = requests.get(runs_url, headers=headers).json()
-                # 💡 FIX 2: Runs නැත්නම් (තාම පටන් ගත්තේ නැත්නම්) හිරවෙන්නේ නෑ
-                if "workflow_runs" in run_res and len(run_res["workflow_runs"]) > 0:
-                    latest_run = run_res["workflow_runs"][0]
-                    status_git = latest_run["status"]
-                    conclusion = latest_run["conclusion"]
-                    status.write(f"⏳ Cloud Compiler තත්ත්වය: **{status_git.upper()}**")
+                is_completed = False
+                while not is_completed:
+                    run_res = requests.get(runs_url, headers=headers).json()
                     
-                    if status_git == "completed":
-                        st.session_state.build_running = False
-                        if conclusion == "success":
-                            artifact_res = requests.get(latest_run["artifacts_url"], headers=headers).json()
-                            if artifact_res.get("artifacts"):
-                                art_id = artifact_res["artifacts"][0]["id"]
-                                st.session_state.apk_url = f"https://github.com/{github_repo}/actions/artifacts/{art_id}"
-                                st.toast("🎯 APK බිල්ඩ් එක සාර්ථකයි!", icon="🎉")
+                    if "workflow_runs" in run_res and len(run_res["workflow_runs"]) > 0:
+                        latest_run = run_res["workflow_runs"][0]
+                        status_git = latest_run["status"]
+                        conclusion = latest_run["conclusion"]
+                        
+                        status_placeholder.write(f"⏳ Cloud Compiler තත්ත්වය: **{status_git.upper()}**")
+                        
+                        if status_git == "completed":
+                            is_completed = True
+                            st.session_state.build_running = False
+                            
+                            if conclusion == "success":
+                                # Artifact (APK) එක ලබා ගැනීම
+                                artifact_res = requests.get(latest_run["artifacts_url"], headers=headers).json()
+                                if artifact_res.get("artifacts"):
+                                    art_id = artifact_res["artifacts"][0]["id"]
+                                    st.session_state.apk_url = f"https://github.com/{github_repo}/actions/artifacts/{art_id}"
+                                    status.update(label="🎯 APK බිල්ඩ් එක සාර්ථකයි!", state="complete", expanded=False)
+                                else:
+                                    st.error("⚠️ APK ෆයිල් එක සොයාගත නොහැක.")
+                                    status.update(label="⚠️ Artifact Missing", state="error")
+                            else:
+                                st.error("❌ Cloud Build එක අසාර්ථක වුණා. GitHub වල Actions ටැබ් එක බලන්න.")
+                                status.update(label="❌ Build Failed", state="error")
+                            
+                            # අවසානයේදී පමණක් පිටුව Rerun කිරීම
+                            st.rerun() 
                         else:
-                            st.error("❌ Cloud Build එක අසාර්ථක වුණා. GitHub වල Actions ටැබ් එක බලන්න.")
-                        st.rerun()
+                            # තවම build වෙනවා නම් තත්පර 5ක් රැඳී සිටීම (Rerun නොකර)
+                            time.sleep(5) 
                     else:
-                        time.sleep(6)
-                        st.rerun()
-                else:
-                    status.write("⏳ GitHub Actions පණගැන්වෙමින් පවතී... (කරුණාකර රැඳී සිටින්න)")
-                    time.sleep(6)
-                    st.rerun()
+                        status_placeholder.write("⏳ GitHub Actions පණගැන්වෙමින් පවතී... (කරුණාකර රැඳී සිටින්න)")
+                        time.sleep(5)
+            
             except Exception as e:
                 st.session_state.build_running = False
                 st.error(f"Error Tracking Build: {e}")
+                status.update(label="❌ Error occurred", state="error")
+                st.rerun()
 
     if st.session_state.apk_url:
         st.markdown("---")
