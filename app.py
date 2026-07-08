@@ -27,51 +27,44 @@ st.markdown("""
 
 if "app_code" not in st.session_state:
     st.session_state.app_code = None
+if "github_token" not in st.session_state:
+    st.session_state.github_token = None
+
 # --- 2. SECRETS & OAUTH LOGIN ---
 default_gemini_key = st.secrets.get("GEMINI_KEY", "")
 client_id = st.secrets.get("GITHUB_CLIENT_ID", "")
 client_secret = st.secrets.get("GITHUB_CLIENT_SECRET", "")
-
-if "github_token" not in st.session_state:
-    st.session_state.github_token = None
 
 with st.sidebar:
     st.title("⚙️ Control Panel")
     gemini_key = st.text_input("Gemini API Key", value=default_gemini_key, type="password")
     
     st.markdown("---")
-    st.subheader("🐙 GitHub Account Login")
+    st.subheader("🐙 GitHub Account")
     
-    # --- නියම GITHUB OAUTH LOGIN FLOW එක ---
-    # URL එකේ 'code' එකක් ඇවිත් තියෙනවද කියලා බලනවා (GitHub එකෙන් ආපසු එනකොට)
+    # URL එකේ 'code' එකක් ඇවිත් තියෙනවද කියලා බලනවා (GitHub ලොගින් එකෙන් පසු)
     if "code" in st.query_params and not st.session_state.github_token:
         auth_code = st.query_params["code"]
         token_url = "https://github.com/login/oauth/access_token"
         headers = {"Accept": "application/json"}
-        data = {
-            "client_id": client_id,
-            "client_secret": client_secret,
-            "code": auth_code
-        }
+        data = {"client_id": client_id, "client_secret": client_secret, "code": auth_code}
         res = requests.post(token_url, headers=headers, data=data).json()
         
         if "access_token" in res:
             st.session_state.github_token = res["access_token"]
-            st.query_params.clear() # URL එක ක්ලියර් කරනවා ලස්සනට තියෙන්න
+            st.query_params.clear()
             st.rerun()
         else:
             st.error("ලොගින් වීම අසාර්ථකයි!")
 
-    # බොත්තම පෙන්වීම හෝ ලොග් වී ඇති බව පෙන්වීම
+    github_repo = ""
+    github_token = ""
+    
     if not st.session_state.github_token:
-        # ලොගින් ලින්ක් එක හැදීම (repo සහ workflow අවසර ඉල්ලමින්)
         auth_url = f"https://github.com/login/oauth/authorize?client_id={client_id}&scope=repo%20workflow"
         st.link_button("🔑 Login with GitHub", auth_url, type="primary", use_container_width=True)
-        st.caption("Base44 Pro හි මෙන් ඔබගේ ගිණුමට ආරක්ෂිතව ලොග් වන්න.")
-        
-        # ලොග් වෙලා නැත්නම් repo එක මැනුවල් ගහන්න දෙන්න පුළුවන්, හෝ disable කරන්න පුළුවන්
-        github_repo = st.text_input("GitHub Repository Name", placeholder="username/repo-name", disabled=True)
-        github_token = ""
+        st.caption("Base44 Pro හි මෙන් ඔබගේ ගිණුමට ලොග් වන්න.")
+        st.selectbox("GitHub Repository", ["කරුණාකර පළමුව ලොග් වන්න"], disabled=True)
     else:
         st.success("✅ GitHub ගිණුමට සාර්ථකව ලොග් වී ඇත")
         if st.button("🚪 Logout"):
@@ -79,7 +72,23 @@ with st.sidebar:
             st.rerun()
             
         github_token = st.session_state.github_token
-        github_repo = st.text_input("GitHub Repository Name", placeholder="username/repo-name", help="ඔබගේ කේතය සෑදිය යුතු රෙපෝ එකේ නම දෙන්න.")
+        
+        # --- AUTO REPO FETCHER (අලුත් පහසුකම) ---
+        with st.spinner("Repositories ගෙන එමින්..."):
+            try:
+                repo_headers = {"Authorization": f"token {github_token}", "Accept": "application/vnd.github.v3+json"}
+                # අලුත්ම Repos 50ක් ගෙන්වා ගැනීම
+                repos_res = requests.get("https://api.github.com/user/repos?sort=updated&per_page=50", headers=repo_headers)
+                if repos_res.status_code == 200:
+                    repo_list = [r["full_name"] for r in repos_res.json()]
+                    if repo_list:
+                        github_repo = st.selectbox("📌 Select your Repository", repo_list)
+                    else:
+                        st.warning("ඔබගේ ගිණුමේ Repositories නොමැත.")
+                else:
+                    github_repo = st.text_input("GitHub Repository Name", placeholder="username/repo-name")
+            except:
+                github_repo = st.text_input("GitHub Repository Name", placeholder="username/repo-name")
 
     st.markdown("---")
     st.subheader("🤖 AI Model")
@@ -89,13 +98,44 @@ with st.sidebar:
         st.session_state.app_code = None
         st.rerun()
 
+# --- 3. MAIN INTERFACE (මැකිලා ගිය කොටස නැවත එක් කර ඇත) ---
+st.title("⚡ AI App Factory (Base44 Pro Edition)")
+st.write("ඔබගේ අදහස ලබා දෙන්න. GitHub Actions හරහා සැබෑ APK එකක් පසුබිමෙන් බිල්ඩ් කරගන්න.")
+
+tab1, tab2, tab3 = st.tabs(["💡 App Idea", "🌐 Web URL Scanner", "🐙 GitHub Repo Scanner"])
+user_context, source_info = "", ""
+
+with tab1:
+    idea_input = st.text_area("ඔබට අවශ්‍ය ඇප් එක ගැන විස්තර කරන්න:", height=120, placeholder="උදා: Trading signals පෙන්නන ලස්සන Dark Mode ඇප් එකක්...")
+    if idea_input: user_context, source_info = f"පරිශීලක අදහස: {idea_input}", "Text Idea"
+
+with tab2:
+    url_input = st.text_input("ස්කෑන් කිරීමට අවශ්‍ය වෙබ් අඩවියේ URL එක දමන්න:")
+    if url_input: user_context, source_info = f"වෙබ් අඩවියේ URL එක: {url_input}. මීට සමාන ඇප් එකක් සාදන්න.", f"Web URL ({url_input})"
+
+with tab3:
+    github_input = st.text_input("කියවීමට අවශ්‍ය GitHub Repo URL එක දමන්න (Public):")
+    if github_input:
+        with st.spinner("GitHub Repository එක කියවමින් පවතී..."):
+            try:
+                repo_api_url = github_input.replace("github.com", "api.github.com/repos").rstrip("/") + "/contents"
+                res = requests.get(repo_api_url, headers={"User-Agent": "Mozilla/5.0"})
+                if res.status_code == 200:
+                    files_list = [f['name'] for f in res.json() if isinstance(f, dict) and 'name' in f]
+                    user_context = f"GitHub Repo: {github_input}. එහි අඩංගු ෆයිල්ස්: {', '.join(files_list)}. මීට ගැළපෙන සුපිරි ඇප් එකක් සාදන්න."
+                    source_info = f"Real GitHub Repo Scanner"
+                    st.success("🐙 GitHub Repo එක සාර්ථකව ස්කෑන් කර හඳුනාගන්නා ලදී!")
+                else:
+                    user_context = f"GitHub Repo URL: {github_input}"
+            except:
+                user_context = f"GitHub Repo URL: {github_input}"
 
 # --- 4. ENGINE START ---
 if st.button("🚀 GENERATE MASTER APP", use_container_width=True):
     if not gemini_key:
         st.error("👈 කරුණාකර ප්‍රථමයෙන් Gemini API Key එක ලබා දෙන්න.")
     elif not user_context:
-        st.warning("⚠️ කරුණාකර තොරතුරු ඇතුළත් කරන්න.")
+        st.warning("⚠️ කරුණාකර තොරතුරු ඇතුළත් කරන්න (උඩ ඇති Tabs වලින් එකක් තෝරන්න).")
     else:
         with st.spinner("AI මාදිලිය මඟින් කේතය ලියමින් පවතී..."):
             try:
@@ -127,12 +167,11 @@ if st.session_state.app_code:
     
     if st.button("🏗️ Trigger Remote Cloud Build & Get APK", type="primary", use_container_width=True):
         if not github_token or not github_repo:
-            st.error("👈 කරුණාකර වම් පස ඇති Sidebar එකෙන් ඔබගේ GitHub Token සහ Repository Name එක ලබා දී සිටින්න්න.")
+            st.error("👈 කරුණාකර වම් පස ඇති Sidebar එකෙන් GitHub ගිණුමට ලොග් වී ඔබගේ Repository එක තෝරන්න.")
         else:
             headers = {"Authorization": f"token {github_token}", "Accept": "application/vnd.github.v3+json"}
             file_url = f"https://api.github.com/repos/{github_repo}/contents/index.html"
             
-            # පරණ ෆයිල් එකක් තිබේ නම් එහි SHA එක ලබා ගැනීම
             sha = ""
             get_res = requests.get(file_url, headers=headers)
             if get_res.status_code == 200: sha = get_res.json()['sha']
@@ -147,12 +186,12 @@ if st.session_state.app_code:
                 
                 if push_res.status_code in [200, 201]:
                     status.write("🚀 කෝඩ් එක අප්ලෝඩ් වුණා. GitHub Actions පද්ධතිය පණගැන්වීමට තත්පර කිහිපයක් රැඳී සිටින්න...")
-                    time.sleep(8) # Race condition එක මඟහරවා ගැනීමට පොඩි විවේකයක්
+                    time.sleep(8) 
                     
                     runs_url = f"https://api.github.com/repos/{github_repo}/actions/runs"
                     apk_download_url = None
                     
-                    for i in range(20): # උපරිම වට 20ක් (විනාඩි 4ක් පමණ) ලයිව් චෙක් කිරීම
+                    for i in range(20): 
                         run_res = requests.get(runs_url, headers=headers).json()
                         if run_res.get("workflow_runs"):
                             latest_run = run_res["workflow_runs"][0]
@@ -170,7 +209,7 @@ if st.session_state.app_code:
                                         apk_download_url = f"https://github.com/{github_repo}/actions/artifacts/{art_id}"
                                     break
                                 else:
-                                    st.error("❌ Cloud Build එක අසාර්ථක වුණා. ඔබගේ GitHub Actions Actions ලොග් බලන්න.")
+                                    st.error("❌ Cloud Build එක අසාර්ථක වුණා. ඔබගේ GitHub Actions ලොග් බලන්න.")
                                     break
                         time.sleep(12)
                     
@@ -182,4 +221,4 @@ if st.session_state.app_code:
                     else:
                         st.warning("⚠️ බිල්ඩ් එක නිම වීමට තව සුළු වෙලාවක් ගත වේ. කරුණාකර ඔබගේ GitHub Repository එකෙහි Actions ටැබ් එක පරීක්ෂා කරන්න.")
                 else:
-                    st.error(f"❌ GitHub එකට කෝඩ් එක දාන්න බැරි වුණා. කරුණාකර Token එක නිවැරදිදැයි බලන්න: {push_res.text}")
+                    st.error(f"❌ GitHub එකට කෝඩ් එක දාන්න බැරි වුණා. කරුණාකර Token අවසර නිවැරදිදැයි බලන්න: {push_res.text}")
