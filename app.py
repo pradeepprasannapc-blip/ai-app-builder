@@ -4,33 +4,64 @@ import streamlit.components.v1 as components
 import re
 
 # --- 1. PAGE CONFIGURATION & PREMIUM UI ---
-st.set_page_config(page_title="Pro AI App Factory", page_icon="⚡", layout="wide")
+st.set_page_config(page_title="Base44 Alternative - Pro AI App Factory", page_icon="⚡", layout="wide")
 
 st.markdown("""
     <style>
-    .stApp { background-color: #0d1117; color: #c9d1d9; }
-    .stButton>button { 
-        background: linear-gradient(45deg, #4f46e5, #06b6d4); 
-        color: white; border: none; padding: 10px 24px; 
-        border-radius: 8px; font-weight: bold; transition: 0.3s; 
+    .stApp {
+        background-color: #0d1117;
+        color: #c9d1d9;
     }
-    .stButton>button:hover { 
-        transform: scale(1.02); box-shadow: 0 0 15px rgba(6, 182, 212, 0.4); 
+    .stButton>button {
+        background: linear-gradient(45deg, #4f46e5, #06b6d4);
+        color: white;
+        border: none;
+        padding: 10px 24px;
+        border-radius: 8px;
+        font-weight: bold;
+        transition: 0.3s;
     }
-    h1, h2, h3 { color: #ffffff !important; font-family: 'Poppins', sans-serif; }
-    .sidebar .sidebar-content { background-color: #161b22; }
+    .stButton>button:hover {
+        transform: scale(1.02);
+        box-shadow: 0 0 15px rgba(6, 182, 212, 0.4);
+    }
+    h1, h2, h3 {
+        color: #ffffff !important;
+        font-family: 'Poppins', sans-serif;
+    }
+    .sidebar .sidebar-content {
+        background-color: #161b22;
+    }
+    .stTextArea>div>div>textarea {
+        background-color: #1e242c;
+        color: #58a6ff;
+        font-family: monospace;
+        border-radius: 8px;
+    }
+    .mobile-frame {
+        border: 6px solid #30363d;
+        border-radius: 24px;
+        padding: 10px;
+        background: #000;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    }
     </style>
 """, unsafe_allow_html=True)
 
-# --- 2. SIDEBAR (Model Selector) ---
+# --- 2. SECRETS HANDLING (Auto API Key) ---
+default_gemini_key = ""
+if hasattr(st, "secrets") and "GEMINI_KEY" in st.secrets:
+    default_gemini_key = st.secrets["GEMINI_KEY"]
+
+# --- 3. SIDEBAR (Control Panel) ---
 with st.sidebar:
     st.title("⚙️ Control Panel")
-    gemini_key = st.text_input("Gemini API Key", type="password")
+    gemini_key = st.text_input("Gemini API Key", value=default_gemini_key, type="password")
     
     st.markdown("---")
     st.subheader("🤖 AI Model Selector")
     
-    # 2.5 මාදිලි ඇතුළත් ලැයිස්තුව
+    # අලුත්ම 2.5 මාදිලි සහ පරණ ඒවා
     model_options = [
         "gemini-2.5-flash",
         "gemini-2.5-pro",
@@ -39,30 +70,55 @@ with st.sidebar:
     ]
     selected_model = st.selectbox("Select Model:", model_options, index=0)
     st.info(f"දැනට ක්‍රියාත්මක: **{selected_model}**")
+    
+    st.markdown("---")
+    st.write("🔒 Base44 Premium Engine")
 
-# --- 3. MAIN INTERFACE ---
-st.title("⚡ AI App Factory (Base44 Premium Builder)")
-st.write("ඔබගේ අදහස ලබා දෙන්න. AI විසින් අතිශය ආකර්ෂණීය (Premium) යෙදුමක් තත්පර ගණනකින් සාදා දෙනු ඇත.")
+# --- 4. MAIN INTERFACE (Input ක්‍රම 3ම එකතු කර ඇත) ---
+st.title("⚡ AI App Factory (Premium Builder)")
+st.write("Web URL එකක්, GitHub Repo එකක් හෝ ඔබගේ අදහසක් ලබා දී තත්පර කිහිපයකින් සම්පූර්ණ ඇප් එකක් නිර්මාණය කරගන්න.")
 
-user_input = st.text_area("ඔබට අවශ්‍ය ඇප් එක ගැන විස්තර කරන්න:", height=120, placeholder="උදා: Trading signals පෙන්නන ලස්සන Dark Mode ඇප් එකක්...")
+tab1, tab2, tab3 = st.tabs(["💡 App Idea (අදහස)", "🌐 Web URL Scanner", "🐙 GitHub Repository"])
 
-# --- 4. ENGINE START ---
+user_context = ""
+source_info = ""
+
+with tab1:
+    idea_input = st.text_area("ඔබට අවශ්‍ය ඇප් එක ගැන විස්තර කරන්න:", height=120, placeholder="උදා: Trading signals පෙන්නන ලස්සන Dark Mode ඇප් එකක්...")
+    if idea_input:
+        user_context = f"පරිශීලක අදහස: {idea_input}"
+        source_info = "Text Idea"
+
+with tab2:
+    url_input = st.text_input("ස්කෑන් කිරීමට අවශ්‍ය වෙබ් අඩවියේ URL එක දමන්න:")
+    if url_input:
+        user_context = f"වෙබ් අඩවියේ URL එක: {url_input}. මෙම වෙබ් අඩවියේ ඇති සැලසුම සහ අරමුණ තේරුම් ගෙන ඊට සමාන ජංගම යෙදුමක් (App) නිර්මාණය කරන්න."
+        source_info = f"Web URL ({url_input})"
+
+with tab3:
+    github_input = st.text_input("GitHub Repo URL එක දමන්න (Public):", placeholder="https://github.com/user/repo")
+    if github_input:
+        user_context = f"GitHub කේත ගබඩාව: {github_input}. මෙම කේත ගබඩාවේ ඇති අරමුණ තේරුම් ගෙන එයට ගැළපෙන UI එකක් සහිත ඇප් එකක් සාදන්න."
+        source_info = f"GitHub Repo ({github_input})"
+
+# --- 5. ENGINE START (App Generation) ---
 if st.button("🚀 GENERATE MASTER APP", use_container_width=True):
     if not gemini_key:
         st.error("👈 කරුණාකර ප්‍රථමයෙන් වම් පස ඇති Sidebar එකට Gemini API Key එක ලබා දෙන්න.")
-    elif not user_input:
-        st.warning("⚠️ කරුණාකර ඔබගේ අදහස ඇතුළත් කරන්න.")
+    elif not user_context:
+        st.warning("⚠️ කරුණාකර එක Input ක්‍රමයකට හෝ තොරතුරු ඇතුළත් කරන්න (Idea, URL හෝ GitHub).")
     else:
         with st.spinner(f"Using {selected_model} to build your Premium App... කරුණාකර රැඳී සිටින්න..."):
             try:
                 genai.configure(api_key=gemini_key)
                 model = genai.GenerativeModel(selected_model)
                 
-                # සුපිරි Premium පෙනුමක් ලබාගැනීමට AI එකට දෙන දැඩි උපදෙස් (Master Prompt)
+                # Base44 මට්ටමේ සුපිරි Premium පෙනුමක් ලබාගැනීමට AI එකට දෙන දැඩි උපදෙස්
                 master_prompt = f"""
                 ඔබ ලෝකයේ සිටින අති දක්ෂතම 'Premium Mobile App UI/UX Designer' සහ 'Frontend Developer' කෙනෙක්. Base44 වැනි ලෝක මට්ටමේ SaaS පද්ධති වල UI නිර්මාණය කිරීම ඔබේ විශේෂත්වයයි.
                 
-                පරිශීලකයාගේ ඉල්ලීම: {user_input}
+                මූලාශ්‍රය: {source_info}
+                විස්තරය: {user_context}
                 
                 කරුණාකර පහත දැඩි නීතිරීති වලට අනුව සම්පූර්ණ ඇප් එක (Single HTML file) සාදන්න:
                 
@@ -73,8 +129,8 @@ if st.button("🚀 GENERATE MASTER APP", use_container_width=True):
                    - බටන් සහ වැදගත් කොටස් සඳහා Neon/Gradients (උදා: bg-gradient-to-r from-cyan-500 to-blue-500) භාවිතා කරන්න.
                    - Soft shadows සහ rounded-2xl/rounded-3xl borders අනිවාර්ය වේ.
                 3. **Typography & Icons:** 'Poppins' හෝ 'Inter' Google Font එක සහ FontAwesome අයිකන භාවිතා කරන්න.
-                4. **Responsiveness:** ජංගම දුරකථන (Mobile-first) සඳහා 100% ක් ගැළපෙන සේ UI එක නිර්මාණය කරන්න.
-                5. **Interactivity:** ලස්සන Hover effects සහ Animations ඇතුළත් කරන්න. අවශ්‍ය JavaScript කේතයද HTML ගොනුවටම (script tag තුළ) ඇතුළත් කරන්න.
+                4. **Responsiveness:** ජංගම දුරකථන (Mobile-first) සඳහා 100% ක් ගැළපෙන සේ UI එක නිර්මාණය කරන්න. (Bottom navigation bar එකක් අවශ්‍ය නම් එකතු කරන්න).
+                5. **Interactivity:** ලස්සන Hover effects සහ සිනිඳු Animations ඇතුළත් කරන්න. අවශ්‍ය JavaScript කේතයද HTML ගොනුවටම (script tag තුළ) ඇතුළත් කරන්න.
 
                 ඉතා වැදගත්: කේතය (Code) පමණක් ```html සහ ``` යන සලකුණු අතර ලබා දෙන්න. වෙනත් කිසිදු අමතර විස්තරයක් කේතය තුළට නොදාන්න.
                 """
@@ -84,34 +140,36 @@ if st.button("🚀 GENERATE MASTER APP", use_container_width=True):
                 
                 # --- 100% Error-proof Code Extraction (Regex භාවිතා කර ඇත) ---
                 html_code = ""
-                # පළමුව ```html සහ ``` අතර ඇති දේ සෙවීම
                 match = re.search(r'```html(.*?)```', full_text, re.DOTALL | re.IGNORECASE)
                 if match:
                     html_code = match.group(1).strip()
                 else:
-                    # බැරි වුණොත් නිකන්ම ``` සහ ``` අතර ඇති දේ සෙවීම
                     match2 = re.search(r'```(.*?)```', full_text, re.DOTALL)
                     if match2:
                         html_code = match2.group(1).strip()
                     else:
-                        # ඒත් බැරි වුණොත් සම්පූර්ණ Text එකම ගැනීම
                         html_code = full_text.strip()
                 
                 st.success("🎯 ඇප් එක සාර්ථකව නිම කරන ලදී!")
                 
-                # --- LIVE CODE EDITOR & PREVIEW ---
+                # --- 6. LIVE CODE EDITOR & PREVIEW ---
                 col1, col2 = st.columns([1, 1])
                 
                 with col1:
                     st.subheader("💻 Live Code Editor")
-                    edited_code = st.text_area("කේතය (HTML/CSS/JS)", html_code, height=600)
+                    edited_code = st.text_area("කේතය වෙනස් කර Preview එක බලන්න (HTML/CSS/JS)", html_code, height=600)
                     
                 with col2:
                     st.subheader("📱 Instant Mobile View")
-                    # ෆෝන් එකක් වගේ පෙනුම එන Box එක
-                    st.markdown('<div style="border: 6px solid #30363d; border-radius: 24px; padding: 10px; background: #000; box-shadow: 0 4px 20px rgba(0,0,0,0.5);">', unsafe_allow_html=True)
+                    st.markdown('<div class="mobile-frame">', unsafe_allow_html=True)
                     components.html(edited_code, height=580, scrolling=True)
                     st.markdown('</div>', unsafe_allow_html=True)
-                    
+                
+                # --- 7. APK EXPORT SECTION ---
+                st.markdown("---")
+                st.subheader("📦 Export Package (APK / AAB)")
+                st.write("ඔබගේ ඇප් එක දැන් සූදානම්! මීළඟ අදියරේදී අපි මෙතනින් කෙලින්ම APK එක Download කරගන්නා Cloud Build System එක සම්බන්ධ කරමු.")
+                st.button("⚙️ Compile & Download APK (Coming Soon)", disabled=True, use_container_width=True)
+                
             except Exception as e:
                 st.error(f"❌ දෝෂයක් මතු විය: {e}")
