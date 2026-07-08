@@ -29,7 +29,6 @@ st.markdown("""
 if "app_code" not in st.session_state: st.session_state.app_code = None
 if "github_token" not in st.session_state: st.session_state.github_token = None
 if "build_running" not in st.session_state: st.session_state.build_running = False
-if "build_log" not in st.session_state: st.session_state.build_log = []
 if "apk_url" not in st.session_state: st.session_state.apk_url = None
 
 # --- 2. SECRETS & OAUTH LOGIN ---
@@ -168,7 +167,7 @@ if st.session_state.app_code:
         components.html(edited_code, height=430, scrolling=True)
         st.markdown('</div>', unsafe_allow_html=True)
         
-    # --- 6. GITHUB ACTIONS APK BUILD ENGINE (MAGIC AUTO-INJECT) ---
+    # --- 6. GITHUB ACTIONS APK BUILD ENGINE ---
     st.markdown("---")
     st.subheader("📦 Base44 Pro APK Compiler (Cloud Engine)")
     
@@ -178,7 +177,7 @@ if st.session_state.app_code:
         else:
             headers = {"Authorization": f"token {github_token}", "Accept": "application/vnd.github.v3+json"}
             
-            # 💡 FIX 1: Workflow මැෂිම Repo එකේ නැත්නම් ඒක ඉබේම හදනවා (Auto-Inject)
+            # Workflow Auto-Inject
             wf_url = f"https://api.github.com/repos/{github_repo}/contents/.github/workflows/build.yml"
             wf_check = requests.get(wf_url, headers=headers)
             if wf_check.status_code != 200:
@@ -186,7 +185,7 @@ if st.session_state.app_code:
                 wf_payload = {"message": "Auto-setup Cloud Build Workflow", "content": base64.b64encode(yaml_content.encode('utf-8')).decode('utf-8')}
                 requests.put(wf_url, headers=headers, json=wf_payload)
             
-            # 2: HTML කේතය Upload කිරීම
+            # Code Upload
             file_url = f"https://api.github.com/repos/{github_repo}/contents/index.html"
             sha = ""
             get_res = requests.get(file_url, headers=headers)
@@ -199,18 +198,17 @@ if st.session_state.app_code:
             push_res = requests.put(file_url, headers=headers, json=payload)
             if push_res.status_code in [200, 201]:
                 st.session_state.build_running = True
-                st.session_state.build_log = ["🔄 කේතය GitHub වෙත Upload කරන ලදී.", "🚀 Actions Compiler එක පණගන්වමින්..."]
                 st.session_state.apk_url = None
                 st.rerun()
             else:
                 st.error(f"❌ GitHub අප්ලෝඩ් එක අසාර්ථකයි: {push_res.text}")
 
-    # --- 7. LIVE COMPILER TRACKER (STREAMLIT CLOUD SAFE) ---
+    # --- 7. MANUAL COMPILER TRACKER (100% TIMEOUT SAFE) ---
     if st.session_state.build_running:
-        with st.status("🛠️ Cloud Build එක සිදුවෙමින් පවතී... (කරුණාකර රැඳී සිටින්න)", expanded=True) as status:
-            for log in st.session_state.build_log: 
-                status.write(log)
-            
+        st.info("🛠️ Cloud Build එක සිදුවෙමින් පවතී... මෙය සාමාන්‍යයෙන් විනාඩි 2-3ක් ගත වේ.")
+        
+        # අලුත් Manual බොත්තම මෙතනින් එක් කර ඇත
+        if st.button("🔄 තත්ත්වය පරීක්ෂා කරන්න (Check Status)", use_container_width=True):
             headers = {"Authorization": f"token {github_token}", "Accept": "application/vnd.github.v3+json"}
             runs_url = f"https://api.github.com/repos/{github_repo}/actions/runs"
             
@@ -222,7 +220,7 @@ if st.session_state.app_code:
                     status_git = latest_run["status"]
                     conclusion = latest_run["conclusion"]
                     
-                    status.write(f"⏳ Cloud Compiler තත්ත්වය: **{status_git.upper()}**")
+                    st.write(f"⏳ Cloud Compiler තත්ත්වය: **{status_git.upper()}**")
                     
                     if status_git == "completed":
                         st.session_state.build_running = False
@@ -231,29 +229,18 @@ if st.session_state.app_code:
                             if artifact_res.get("artifacts"):
                                 art_id = artifact_res["artifacts"][0]["id"]
                                 st.session_state.apk_url = f"https://github.com/{github_repo}/actions/artifacts/{art_id}"
-                                status.update(label="🎯 APK බිල්ඩ් එක සාර්ථකයි!", state="complete", expanded=False)
                             else:
                                 st.error("⚠️ APK ෆයිල් එක සොයාගත නොහැක.")
-                                status.update(label="⚠️ Artifact Missing", state="error")
                         else:
                             st.error("❌ Cloud Build එක අසාර්ථක වුණා. GitHub වල Actions ටැබ් එක බලන්න.")
-                            status.update(label="❌ Build Failed", state="error")
-                        
-                        # සාර්ථක වූ පසු අවසාන වතාවට පිටුව refresh කිරීම
-                        st.rerun() 
-                    else:
-                        # Timeout වීම වැළැක්වීමට තත්පර 10ක් රැඳී සිට නැවත පිටුව refresh කිරීම
-                        time.sleep(10)
                         st.rerun()
+                    else:
+                        st.warning("⏳ තවම Build වෙමින් පවතී. තව තත්පර 30කින් පමණ නැවත Check කරන්න.")
                 else:
-                    status.write("⏳ GitHub Actions පණගැන්වෙමින් පවතී...")
-                    time.sleep(10)
-                    st.rerun()
+                    st.warning("⏳ GitHub Actions තවම පටන් ගෙන නැත...")
                     
             except Exception as e:
-                status.write("⚠️ ජාලයේ ගැටලුවක්. නැවත පරීක්ෂා කරමින් පවතී...")
-                time.sleep(10)
-                st.rerun()
+                st.error(f"⚠️ ජාලයේ ගැටලුවක්: {e}")
 
     if st.session_state.apk_url:
         st.markdown("---")
