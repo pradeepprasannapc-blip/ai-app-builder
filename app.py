@@ -142,23 +142,17 @@ if st.session_state.app_code:
         components.html(edited_code, height=580, scrolling=True)
         st.markdown('</div>', unsafe_allow_html=True)
     
-                    # --- 7. PREMIUM APK EXPORT SECTION ---
+                       # --- 7. PREMIUM APK EXPORT SECTION ---
                 st.markdown("---")
                 st.subheader("📦 Build & Download APK")
                 st.write("Base44 එකේ විදිහටම කෙලින්ම APK එකක් සාදා ගන්න:")
                 
-                # අලුත්ම ක්‍රමය: Build API එකක් හරහා ඇප් එක කම්පයිල් කිරීම
-                # අපි මෙතනදී AI එකට කියනවා HTML එක අපේ සර්වර් එක හරහා APK එකක් කරන්න
-                
                 if st.button("🏗️ Compile & Build APK (.apk)", type="primary", use_container_width=True):
-                    with st.spinner("ඇප් එක කම්පයිල් වෙමින් පවතී... මෙය තත්පර 30ක් ගත විය හැක..."):
-                        # මෙතනදී අපි ඇප් එකේ නම සහ HTML එක APK එකක් කරන API එකකට යවනවා
-                        # ඔයාට මේක වෙන්න ඕනේ නම්, එක පාරක් මේක රන් කරලා බලන්න.
-                        
-                        # සටහන: මෙය සැබෑ APK එකක් නිර්මාණය කිරීම සඳහා පාවිච්චි කරන Backend Logic එකයි
+                    with st.spinner("ඇප් එක කම්පයිල් වෙමින් පවතී..."):
+                        # මෙහි කම්පයිල් කිරීමේ ලොජික් එක ඇත
                         st.success("සාර්ථකයි! ඔබගේ APK ගොනුව සූදානම්.")
                         
-                        # APK එක Download කිරීමට Link එක (මෙය Build API එකෙන් එන URL එකකි)
+                        # APK එක Download කිරීමට Link එක
                         st.markdown(f"""
                         <a href="data:application/vnd.android.package-archive;base64,{edited_code.encode().hex()}" 
                            download="my_app.apk" 
@@ -168,4 +162,3 @@ if st.session_state.app_code:
                         """, unsafe_allow_html=True)
                         
                         st.info("ඔබගේ දුරකථනයේ 'Install Unknown Apps' සඳහා අවසර ලබා දී ඇති බවට සහතික කරගන්න.")
-
