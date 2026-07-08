@@ -25,10 +25,12 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-if "app_code" not in st.session_state:
-    st.session_state.app_code = None
-if "github_token" not in st.session_state:
-    st.session_state.github_token = None
+# Session State හඳුන්වාදීම
+if "app_code" not in st.session_state: st.session_state.app_code = None
+if "github_token" not in st.session_state: st.session_state.github_token = None
+if "build_running" not in st.session_state: st.session_state.build_running = False
+if "build_log" not in st.session_state: st.session_state.build_log = []
+if "apk_url" not in st.session_state: st.session_state.apk_url = None
 
 # --- 2. SECRETS & OAUTH LOGIN ---
 default_gemini_key = st.secrets.get("GEMINI_KEY", "")
@@ -42,7 +44,7 @@ with st.sidebar:
     st.markdown("---")
     st.subheader("🐙 GitHub Account")
     
-    # URL එකේ 'code' එකක් ඇවිත් තියෙනවද කියලා බලනවා (GitHub ලොගින් එකෙන් පසු)
+    # URL OAuth Code එක චෙක් කිරීම
     if "code" in st.query_params and not st.session_state.github_token:
         auth_code = st.query_params["code"]
         token_url = "https://github.com/login/oauth/access_token"
@@ -69,15 +71,16 @@ with st.sidebar:
         st.success("✅ GitHub ගිණුමට සාර්ථකව ලොග් වී ඇත")
         if st.button("🚪 Logout"):
             st.session_state.github_token = None
+            st.session_state.build_running = False
+            st.session_state.apk_url = None
             st.rerun()
             
         github_token = st.session_state.github_token
         
-        # --- AUTO REPO FETCHER (අලුත් පහසුකම) ---
+        # AUTO REPO DROPDOWN LIST
         with st.spinner("Repositories ගෙන එමින්..."):
             try:
                 repo_headers = {"Authorization": f"token {github_token}", "Accept": "application/vnd.github.v3+json"}
-                # අලුත්ම Repos 50ක් ගෙන්වා ගැනීම
                 repos_res = requests.get("https://api.github.com/user/repos?sort=updated&per_page=50", headers=repo_headers)
                 if repos_res.status_code == 200:
                     repo_list = [r["full_name"] for r in repos_res.json()]
@@ -96,9 +99,11 @@ with st.sidebar:
     
     if st.button("🗑️ Clear Workspace"):
         st.session_state.app_code = None
+        st.session_state.build_running = False
+        st.session_state.apk_url = None
         st.rerun()
 
-# --- 3. MAIN INTERFACE (මැකිලා ගිය කොටස නැවත එක් කර ඇත) ---
+# --- 3. MAIN INTERFACE ---
 st.title("⚡ AI App Factory (Base44 Pro Edition)")
 st.write("ඔබගේ අදහස ලබා දෙන්න. GitHub Actions හරහා සැබෑ APK එකක් පසුබිමෙන් බිල්ඩ් කරගන්න.")
 
@@ -125,10 +130,8 @@ with tab3:
                     user_context = f"GitHub Repo: {github_input}. එහි අඩංගු ෆයිල්ස්: {', '.join(files_list)}. මීට ගැළපෙන සුපිරි ඇප් එකක් සාදන්න."
                     source_info = f"Real GitHub Repo Scanner"
                     st.success("🐙 GitHub Repo එක සාර්ථකව ස්කෑන් කර හඳුනාගන්නා ලදී!")
-                else:
-                    user_context = f"GitHub Repo URL: {github_input}"
             except:
-                user_context = f"GitHub Repo URL: {github_input}"
+                pass
 
 # --- 4. ENGINE START ---
 if st.button("🚀 GENERATE MASTER APP", use_container_width=True):
@@ -146,26 +149,27 @@ if st.button("🚀 GENERATE MASTER APP", use_container_width=True):
                 response = model.generate_content(master_prompt)
                 match = re.search(r'```html(.*?)```', response.text, re.DOTALL | re.IGNORECASE)
                 st.session_state.app_code = match.group(1).strip() if match else response.text.strip()
+                st.session_state.apk_url = None # පැරණි ලින්ක් ක්ලියර් කිරීම
             except Exception as e:
                 st.error(f"❌ දෝෂයක්: {e}")
 
-# --- 5. LIVE DISPLAY & REAL-TIME CLOUD BUILD ---
+# --- 5. LIVE DISPLAY & EDITING ---
 if st.session_state.app_code:
     col1, col2 = st.columns([1, 1])
     with col1:
         st.subheader("💻 Live Code Editor")
-        edited_code = st.text_area("කේතය වෙනස් කරන්න", st.session_state.app_code, height=500)
+        edited_code = st.text_area("කේතය වෙනස් කරන්න", st.session_state.app_code, height=450)
     with col2:
         st.subheader("📱 Instant Mobile View")
         st.markdown('<div class="mobile-frame">', unsafe_allow_html=True)
-        components.html(edited_code, height=480, scrolling=True)
+        components.html(edited_code, height=430, scrolling=True)
         st.markdown('</div>', unsafe_allow_html=True)
         
-    # --- 6. GITHUB ACTIONS REAL APK BUILD ENGINE ---
+    # --- 6. GITHUB ACTIONS APK BUILD ENGINE ---
     st.markdown("---")
     st.subheader("📦 Base44 Pro APK Compiler (Cloud Engine)")
     
-    if st.button("🏗️ Trigger Remote Cloud Build & Get APK", type="primary", use_container_width=True):
+    if st.button("🏗️ Trigger Remote Cloud Build & Get APK", type="primary", use_container_width=True, disabled=st.session_state.build_running):
         if not github_token or not github_repo:
             st.error("👈 කරුණාකර වම් පස ඇති Sidebar එකෙන් GitHub ගිණුමට ලොග් වී ඔබගේ Repository එක තෝරන්න.")
         else:
@@ -180,45 +184,63 @@ if st.session_state.app_code:
             payload = {"message": "Update AI App Source Code", "content": encoded_code}
             if sha: payload["sha"] = sha
                 
-            with st.status("Cloud Build Engine එක ක්‍රියාත්මක වෙමින් පවතී...", expanded=True) as status:
-                status.write("🔄 කේතය GitHub වෙත Upload කරමින්...")
-                push_res = requests.put(file_url, headers=headers, json=payload)
-                
-                if push_res.status_code in [200, 201]:
-                    status.write("🚀 කෝඩ් එක අප්ලෝඩ් වුණා. GitHub Actions පද්ධතිය පණගැන්වීමට තත්පර කිහිපයක් රැඳී සිටින්න...")
-                    time.sleep(8) 
+            push_res = requests.put(file_url, headers=headers, json=payload)
+            
+            if push_res.status_code in [200, 201]:
+                # Non-blocking පසුබිම් ලූපය ක්‍රියාත්මක කිරීම
+                st.session_state.build_running = True
+                st.session_state.build_log = ["🔄 කේතය GitHub වෙත Upload කරන ලදී.", "🚀 Actions Compiler එක පණගන්වමින්... (රැඳී සිටින්න්න)"]
+                st.session_state.apk_url = None
+                st.rerun()
+            else:
+                st.error(f"❌ GitHub එකට කෝඩ් එක දාන්න බැරි වුණා: {push_res.text}")
+
+    # --- 7. NON-BLOCKING LIVE COMPILER TRACKER (TIME-OUT FIX) ---
+    if st.session_state.build_running:
+        with st.status("🛠️ Cloud Build එක සිදුවෙමින් පවතී...", expanded=True) as status:
+            for log in st.session_state.build_log:
+                status.write(log)
+            
+            headers = {"Authorization": f"token {github_token}", "Accept": "application/vnd.github.v3+json"}
+            runs_url = f"https://api.github.com/repos/{github_repo}/actions/runs"
+            
+            try:
+                run_res = requests.get(runs_url, headers=headers).json()
+                if run_res.get("workflow_runs"):
+                    latest_run = run_res["workflow_runs"][0]
+                    status_git = latest_run["status"]
+                    conclusion = latest_run["conclusion"]
                     
-                    runs_url = f"https://api.github.com/repos/{github_repo}/actions/runs"
-                    apk_download_url = None
+                    status.write(f"⏳ Cloud Compiler තත්ත්වය: **{status_git.upper()}**")
                     
-                    for i in range(20): 
-                        run_res = requests.get(runs_url, headers=headers).json()
-                        if run_res.get("workflow_runs"):
-                            latest_run = run_res["workflow_runs"][0]
-                            status_git = latest_run["status"]
-                            conclusion = latest_run["conclusion"]
-                            
-                            status.write(f"⏳ Cloud Compiler තත්ත්වය: **{status_git.upper()}** (වැඩප්‍රගතිය උකහා ගනිමින්...)")
-                            
-                            if status_git == "completed":
-                                if conclusion == "success":
-                                    status.write("🎉 APK එක සාර්ථකව නිම කර ඇත!")
-                                    artifact_res = requests.get(latest_run["artifacts_url"], headers=headers).json()
-                                    if artifact_res.get("artifacts"):
-                                        art_id = artifact_res["artifacts"][0]["id"]
-                                        apk_download_url = f"https://github.com/{github_repo}/actions/artifacts/{art_id}"
-                                    break
-                                else:
-                                    st.error("❌ Cloud Build එක අසාර්ථක වුණා. ඔබගේ GitHub Actions ලොග් බලන්න.")
-                                    break
-                        time.sleep(12)
-                    
-                    if apk_download_url:
-                        status.update(label="🎯 APK බිල්ඩ් එක 100% ක් සාර්ථකයි!", state="complete")
-                        st.balloons()
-                        st.link_button("📥 DOWNLOAD OFFICIAL APK (ZIP)", apk_download_url, use_container_width=True)
-                        st.write("💡 *සටහන: ලැබෙන ZIP ගොනුව දිගහැර (Extract) එහි ඇති සැබෑ APK එක දුරකථනයට ස්ථාපනය කරන්න.*")
+                    if status_git == "completed":
+                        st.session_state.build_running = False
+                        if conclusion == "success":
+                            artifact_res = requests.get(latest_run["artifacts_url"], headers=headers).json()
+                            if artifact_res.get("artifacts"):
+                                art_id = artifact_res["artifacts"][0]["id"]
+                                st.session_state.apk_url = f"https://github.com/{github_repo}/actions/artifacts/{art_id}"
+                                st.toast("🎯 APK බිල්ඩ් එක සාර්ථකයි!", icon="🎉")
+                            else:
+                                st.error("⚠️ බිල්ඩ් එක සාර්ථකයි, නමුත් APK එක සර්වර් එකෙන් සොයාගත නොහැක.")
+                        else:
+                            st.error("❌ Cloud Build එක අසාර්ථක වුණා. ඔබගේ GitHub Actions Actions ලොග් බලන්න.")
+                        st.rerun()
                     else:
-                        st.warning("⚠️ බිල්ඩ් එක නිම වීමට තව සුළු වෙලාවක් ගත වේ. කරුණාකර ඔබගේ GitHub Repository එකෙහි Actions ටැබ් එක පරීක්ෂා කරන්න.")
+                        # තත්පර 6ක් නිදාගෙන පිටුව රිෆ්‍රෙෂ් කරනවා (Websocket එක සජීවීව තබා ගැනීමට)
+                        time.sleep(6)
+                        st.rerun()
                 else:
-                    st.error(f"❌ GitHub එකට කෝඩ් එක දාන්න බැරි වුණා. කරුණාකර Token අවසර නිවැරදිදැයි බලන්න: {push_res.text}")
+                    time.sleep(5)
+                    st.rerun()
+            except Exception as e:
+                st.session_state.build_running = False
+                st.error(f"Error: {e}")
+
+    # බිල්ඩ් එක සාර්ථක නම් ඩවුන්ලෝඩ් බටන් එක ස්ථිරව පෙන්වීම
+    if st.session_state.apk_url:
+        st.markdown("---")
+        st.success("🎯 සාර්ථකයි! ඔබගේ APK ගොනුව සූදානම්.")
+        st.balloons()
+        st.link_button("📥 DOWNLOAD OFFICIAL APK (ZIP)", st.session_state.apk_url, use_container_width=True)
+        st.write("💡 *සටහන: ලැබෙන ZIP ගොනුව දිගහැර (Extract) එහි ඇති සැබෑ APK එක දුරකථනයට ස්ථාපනය කරන්න.*")
