@@ -2,198 +2,174 @@ import streamlit as st
 import google.generativeai as genai
 import streamlit.components.v1 as components
 import re
+import requests
+import base64
+import time
 
 # --- 1. PAGE CONFIGURATION & PREMIUM UI ---
-st.set_page_config(page_title="Base44 Alternative - Pro AI App Factory", page_icon="⚡", layout="wide")
+st.set_page_config(page_title="Base44 Pro - Cloud AI Factory", page_icon="⚡", layout="wide")
 
 st.markdown("""
     <style>
-    .stApp {
-        background-color: #0d1117;
-        color: #c9d1d9;
+    .stApp { background-color: #0d1117; color: #c9d1d9; }
+    .stButton>button { 
+        background: linear-gradient(45deg, #4f46e5, #06b6d4); 
+        color: white; border: none; padding: 10px 24px; 
+        border-radius: 8px; font-weight: bold; transition: 0.3s; 
     }
-    .stButton>button {
-        background: linear-gradient(45deg, #4f46e5, #06b6d4);
-        color: white;
-        border: none;
-        padding: 10px 24px;
-        border-radius: 8px;
-        font-weight: bold;
-        transition: 0.3s;
-    }
-    .stButton>button:hover {
-        transform: scale(1.02);
-        box-shadow: 0 0 15px rgba(6, 182, 212, 0.4);
-    }
-    h1, h2, h3 {
-        color: #ffffff !important;
-        font-family: 'Poppins', sans-serif;
-    }
-    .sidebar .sidebar-content {
-        background-color: #161b22;
-    }
-    .stTextArea>div>div>textarea {
-        background-color: #1e242c;
-        color: #58a6ff;
-        font-family: monospace;
-        border-radius: 8px;
-    }
-    .mobile-frame {
-        border: 6px solid #30363d;
-        border-radius: 24px;
-        padding: 10px;
-        background: #000;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-    }
+    .stButton>button:hover { transform: scale(1.02); box-shadow: 0 0 15px rgba(6, 182, 212, 0.4); }
+    h1, h2, h3 { color: #ffffff !important; font-family: 'Poppins', sans-serif; }
+    .sidebar .sidebar-content { background-color: #161b22; }
+    .stTextArea>div>div>textarea { background-color: #1e242c; color: #58a6ff; font-family: monospace; border-radius: 8px; }
+    .mobile-frame { border: 6px solid #30363d; border-radius: 24px; padding: 10px; background: #000; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
     </style>
 """, unsafe_allow_html=True)
 
-# --- 2. SESSION STATE (Refresh වුණත් මැකෙන්නේ නැති වෙන්න) ---
 if "app_code" not in st.session_state:
     st.session_state.app_code = None
 
-# --- 3. SECRETS HANDLING (Auto API Key) ---
-default_gemini_key = ""
-if hasattr(st, "secrets") and "GEMINI_KEY" in st.secrets:
-    default_gemini_key = st.secrets["GEMINI_KEY"]
+# --- 2. SECRETS & SIDEBAR (GitHub Config) ---
+default_gemini_key = st.secrets.get("GEMINI_KEY", "")
 
-# --- 4. SIDEBAR (Control Panel) ---
 with st.sidebar:
     st.title("⚙️ Control Panel")
     gemini_key = st.text_input("Gemini API Key", value=default_gemini_key, type="password")
     
     st.markdown("---")
-    st.subheader("🤖 AI Model Selector")
-    
-    model_options = [
-        "gemini-2.5-flash",
-        "gemini-2.5-pro",
-        "gemini-1.5-flash",
-        "gemini-1.5-pro"
-    ]
-    selected_model = st.selectbox("Select Model:", model_options, index=0)
-    st.info(f"දැනට ක්‍රියාත්මක: **{selected_model}**")
+    st.subheader("🐙 GitHub Account Connection")
+    github_token = st.text_input("GitHub Personal Access Token (PAT)", type="password", help="GitHub -> Settings -> Developer Settings -> Tokens (Classic) වලින් 'repo' සහ 'workflow' දමා ගන්න.")
+    github_repo = st.text_input("GitHub Repository Name", placeholder="username/repo-name")
     
     st.markdown("---")
-    st.write("🔒 Base44 Premium Engine")
+    st.subheader("🤖 AI Model")
+    selected_model = st.selectbox("Select Model:", ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-flash"], index=0)
     
     if st.button("🗑️ Clear Workspace"):
         st.session_state.app_code = None
         st.rerun()
 
-# --- 5. MAIN INTERFACE ---
-st.title("⚡ AI App Factory (Premium Builder)")
-st.write("Web URL එකක්, GitHub Repo එකක් හෝ ඔබගේ අදහසක් ලබා දී තත්පර කිහිපයකින් සම්පූර්ණ ඇප් එකක් නිර්මාණය කරගන්න.")
+# --- 3. MAIN INTERFACE ---
+st.title("⚡ AI App Factory (Base44 Pro Edition)")
+st.write("ඔබගේ අදහස ලබා දෙන්න. GitHub Actions හරහා සැබෑ APK එකක් පසුබිමෙන් බිල්ඩ් කරගන්න.")
 
-tab1, tab2, tab3 = st.tabs(["💡 App Idea (අදහස)", "🌐 Web URL Scanner", "🐙 GitHub Repository"])
-
-user_context = ""
-source_info = ""
+tab1, tab2, tab3 = st.tabs(["💡 App Idea", "🌐 Web URL Scanner", "🐙 GitHub Repository"])
+user_context, source_info = "", ""
 
 with tab1:
     idea_input = st.text_area("ඔබට අවශ්‍ය ඇප් එක ගැන විස්තර කරන්න:", height=120, placeholder="උදා: Trading signals පෙන්නන ලස්සන Dark Mode ඇප් එකක්...")
-    if idea_input:
-        user_context = f"පරිශීලක අදහස: {idea_input}"
-        source_info = "Text Idea"
+    if idea_input: user_context, source_info = f"පරිශීලක අදහස: {idea_input}", "Text Idea"
 
 with tab2:
     url_input = st.text_input("ස්කෑන් කිරීමට අවශ්‍ය වෙබ් අඩවියේ URL එක දමන්න:")
-    if url_input:
-        user_context = f"වෙබ් අඩවියේ URL එක: {url_input}. මෙම වෙබ් අඩවියේ ඇති සැලසුම සහ අරමුණ තේරුම් ගෙන ඊට සමාන ජංගම යෙදුමක් (App) නිර්මාණය කරන්න."
-        source_info = f"Web URL ({url_input})"
+    if url_input: user_context, source_info = f"වෙබ් අඩවියේ URL එක: {url_input}. මීට සමාන ඇප් එකක් සාදන්න.", f"Web URL ({url_input})"
 
 with tab3:
-    github_input = st.text_input("GitHub Repo URL එක දමන්න (Public):", placeholder="https://github.com/user/repo")
+    github_input = st.text_input("කියවීමට අවශ්‍ය GitHub Repo URL එක දමන්න (Public):")
     if github_input:
-        user_context = f"GitHub කේත ගබඩාව: {github_input}. මෙම කේත ගබඩාවේ ඇති අරමුණ තේරුම් ගෙන එයට ගැළපෙන UI එකක් සහිත ඇප් එකක් සාදන්න."
-        source_info = f"GitHub Repo ({github_input})"
+        with st.spinner("GitHub Repository එක කියවමින් පවතී..."):
+            try:
+                repo_api_url = github_input.replace("github.com", "api.github.com/repos").rstrip("/") + "/contents"
+                res = requests.get(repo_api_url, headers={"User-Agent": "Mozilla/5.0"})
+                if res.status_code == 200:
+                    files_list = [f['name'] for f in res.json() if isinstance(f, dict) and 'name' in f]
+                    user_context = f"GitHub Repo: {github_input}. එහි අඩංගු ෆයිල්ස්: {', '.join(files_list)}. මීට ගැළපෙන සුපිරි ඇප් එකක් සාදන්න."
+                    source_info = f"Real GitHub Repo Scanner"
+                    st.success("🐙 GitHub Repo එක සාර්ථකව ස්කෑන් කර හඳුනාගන්නා ලදී!")
+                else:
+                    user_context = f"GitHub Repo URL: {github_input}"
+            except:
+                user_context = f"GitHub Repo URL: {github_input}"
 
-# --- 6. ENGINE START (App Generation) ---
+# --- 4. ENGINE START ---
 if st.button("🚀 GENERATE MASTER APP", use_container_width=True):
     if not gemini_key:
-        st.error("👈 කරුණාකර ප්‍රථමයෙන් වම් පස ඇති Sidebar එකට Gemini API Key එක ලබා දෙන්න.")
+        st.error("👈 කරුණාකර ප්‍රථමයෙන් Gemini API Key එක ලබා දෙන්න.")
     elif not user_context:
-        st.warning("⚠️ කරුණාකර එක Input ක්‍රමයකට හෝ තොරතුරු ඇතුළත් කරන්න (Idea, URL හෝ GitHub).")
+        st.warning("⚠️ කරුණාකර තොරතුරු ඇතුළත් කරන්න.")
     else:
-        with st.spinner(f"Using {selected_model} to build your Premium App... කරුණාකර රැඳී සිටින්න..."):
+        with st.spinner("AI මාදිලිය මඟින් කේතය ලියමින් පවතී..."):
             try:
                 genai.configure(api_key=gemini_key)
                 model = genai.GenerativeModel(selected_model)
-                
-                master_prompt = f"""
-                ඔබ ලෝකයේ සිටින අති දක්ෂතම 'Premium Mobile App UI/UX Designer' සහ 'Frontend Developer' කෙනෙක්. Base44 වැනි ලෝක මට්ටමේ SaaS පද්ධති වල UI නිර්මාණය කිරීම ඔබේ විශේෂත්වයයි.
-                
-                මූලාශ්‍රය: {source_info}
-                විස්තරය: {user_context}
-                
-                කරුණාකර පහත දැඩි නීතිරීති වලට අනුව සම්පූර්ණ ඇප් එක (Single HTML file) සාදන්න:
-                
-                1. **UI Framework:** අනිවාර්යයෙන්ම Tailwind CSS (CDN හරහා) භාවිතා කරන්න. (`<script src="https://cdn.tailwindcss.com"></script>`)
-                2. **Design Language (Premium Look):**
-                   - සම්පූර්ණයෙන්ම නවීන Dark Mode එකක් භාවිතා කරන්න (උදා: bg-slate-900).
-                   - Glassmorphism effects (backdrop-blur, bg-white/10) භාවිතා කරන්න.
-                   - බටන් සහ වැදගත් කොටස් සඳහා Neon/Gradients (උදා: bg-gradient-to-r from-cyan-500 to-blue-500) භාවිතා කරන්න.
-                   - Soft shadows සහ rounded-2xl/rounded-3xl borders අනිවාර්ය වේ.
-                3. **Typography & Icons:** 'Poppins' හෝ 'Inter' Google Font එක සහ FontAwesome අයිකන භාවිතා කරන්න.
-                4. **Responsiveness:** ජංගම දුරකථන (Mobile-first) සඳහා 100% ක් ගැළපෙන සේ UI එක නිර්මාණය කරන්න.
-                5. **Interactivity:** ලස්සන Hover effects සහ සිනිඳු Animations ඇතුළත් කරන්න. අවශ්‍ය JavaScript කේතයද HTML ගොනුවටම (script tag තුළ) ඇතුළත් කරන්න.
-
-                ඉතා වැදගත්: කේතය (Code) පමණක් ```html සහ ``` යන සලකුණු අතර ලබා දෙන්න. වෙනත් කිසිදු අමතර විස්තරයක් කේතය තුළට නොදාන්න.
-                """
+                master_prompt = f"ඔබ Premium UI Developer කෙනෙක්. මූලාශ්‍රය: {source_info}. විස්තරය: {user_context}. කරුණාකර Tailwind CSS සහ ලස්සන Dark Mode සහිත සම්පූර්ණ Single HTML කේතය පමණක් ```html සහ ``` අතර ලබා දෙන්න."
                 
                 response = model.generate_content(master_prompt)
-                full_text = response.text
-                
-                html_code = ""
-                match = re.search(r'```html(.*?)```', full_text, re.DOTALL | re.IGNORECASE)
-                if match:
-                    html_code = match.group(1).strip()
-                else:
-                    match2 = re.search(r'```(.*?)```', full_text, re.DOTALL)
-                    if match2:
-                        html_code = match2.group(1).strip()
-                    else:
-                        html_code = full_text.strip()
-                
-                # කේතය Session State එකේ සේව් කිරීම (Refresh වුණත් මැකෙන්නේ නෑ)
-                st.session_state.app_code = html_code
-                
+                match = re.search(r'```html(.*?)```', response.text, re.DOTALL | re.IGNORECASE)
+                st.session_state.app_code = match.group(1).strip() if match else response.text.strip()
             except Exception as e:
-                st.error(f"❌ දෝෂයක් මතු විය: {e}")
+                st.error(f"❌ දෝෂයක්: {e}")
 
-# --- 7. DISPLAY GENERATED APP & PREMIUM EXPORT ---
+# --- 5. LIVE DISPLAY & REAL-TIME CLOUD BUILD ---
 if st.session_state.app_code:
-    st.success("🎯 ඇප් එක සාර්ථකව නිම කරන ලදී!")
-    
     col1, col2 = st.columns([1, 1])
-    
     with col1:
         st.subheader("💻 Live Code Editor")
-        edited_code = st.text_area("කේතය වෙනස් කර Preview එක බලන්න (HTML/CSS/JS)", st.session_state.app_code, height=600)
-        
+        edited_code = st.text_area("කේතය වෙනස් කරන්න", st.session_state.app_code, height=500)
     with col2:
         st.subheader("📱 Instant Mobile View")
         st.markdown('<div class="mobile-frame">', unsafe_allow_html=True)
-        components.html(edited_code, height=580, scrolling=True)
+        components.html(edited_code, height=480, scrolling=True)
         st.markdown('</div>', unsafe_allow_html=True)
-    
-    # --- PREMIUM APK EXPORT SECTION ---
+        
+    # --- 6. GITHUB ACTIONS REAL APK BUILD ENGINE ---
     st.markdown("---")
-    st.subheader("📦 Build & Download APK")
-    st.write("Base44 එකේ විදිහටම කිසිම වෙනත් වෙබ් අඩවියකට නොගොස් කෙලින්ම APK එකක් සාදා ගන්න:")
+    st.subheader("📦 Base44 Pro APK Compiler (Cloud Engine)")
     
-    if st.button("🏗️ Compile & Build APK (.apk)", type="primary", use_container_width=True):
-        with st.spinner("ඇප් එක කම්පයිල් වෙමින් පවතී... කරුණාකර රැඳී සිටින්න..."):
-            st.success("සාර්ථකයි! ඔබගේ APK ගොනුව සූදානම්.")
+    if st.button("🏗️ Trigger Remote Cloud Build & Get APK", type="primary", use_container_width=True):
+        if not github_token or not github_repo:
+            st.error("👈 කරුණාකර වම් පස ඇති Sidebar එකෙන් ඔබගේ GitHub Token සහ Repository Name එක ලබා දී සිටින්න්න.")
+        else:
+            headers = {"Authorization": f"token {github_token}", "Accept": "application/vnd.github.v3+json"}
+            file_url = f"https://api.github.com/repos/{github_repo}/contents/index.html"
             
-            # Base64 Encode එකක් වෙනුවට සරලව Hex String එකක් විදිහට සකසා HTML Download Trigger එකක් සෑදීම
-            # (Streamlit Refresh නොවී කෙලින්ම .apk එක බාගත කරගැනීමට Base44 ආකාරයේ ලස්සන බටන් එකක්)
-            st.markdown(f"""
-            <a href="data:application/vnd.android.package-archive;charset=utf-8,{edited_code}" 
-               download="my_premium_app.apk" 
-               style="background: linear-gradient(45deg, #10b981, #059669); color: white; padding: 14px 24px; text-decoration: none; border-radius: 8px; font-weight: bold; display: block; text-align: center; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3); transition: 0.3s;">
-               📥 Download APK File
-            </a>
-            """, unsafe_allow_html=True)
+            # පරණ ෆයිල් එකක් තිබේ නම් එහි SHA එක ලබා ගැනීම
+            sha = ""
+            get_res = requests.get(file_url, headers=headers)
+            if get_res.status_code == 200: sha = get_res.json()['sha']
             
-            st.info("💡 සටහන: ඔබගේ දුරකථනයේ 'Install Unknown Apps' (නොදන්නා යෙදුම් ස්ථාපනය) සඳහා අවසර ලබා දී ඇති බවට සහතික කරගන්න.")
+            encoded_code = base64.b64encode(edited_code.encode('utf-8')).decode('utf-8')
+            payload = {"message": "Update AI App Source Code", "content": encoded_code}
+            if sha: payload["sha"] = sha
+                
+            with st.status("Cloud Build Engine එක ක්‍රියාත්මක වෙමින් පවතී...", expanded=True) as status:
+                status.write("🔄 කේතය GitHub වෙත Upload කරමින්...")
+                push_res = requests.put(file_url, headers=headers, json=payload)
+                
+                if push_res.status_code in [200, 201]:
+                    status.write("🚀 කෝඩ් එක අප්ලෝඩ් වුණා. GitHub Actions පද්ධතිය පණගැන්වීමට තත්පර කිහිපයක් රැඳී සිටින්න...")
+                    time.sleep(8) # Race condition එක මඟහරවා ගැනීමට පොඩි විවේකයක්
+                    
+                    runs_url = f"https://api.github.com/repos/{github_repo}/actions/runs"
+                    apk_download_url = None
+                    
+                    for i in range(20): # උපරිම වට 20ක් (විනාඩි 4ක් පමණ) ලයිව් චෙක් කිරීම
+                        run_res = requests.get(runs_url, headers=headers).json()
+                        if run_res.get("workflow_runs"):
+                            latest_run = run_res["workflow_runs"][0]
+                            status_git = latest_run["status"]
+                            conclusion = latest_run["conclusion"]
+                            
+                            status.write(f"⏳ Cloud Compiler තත්ත්වය: **{status_git.upper()}** (වැඩප්‍රගතිය උකහා ගනිමින්...)")
+                            
+                            if status_git == "completed":
+                                if conclusion == "success":
+                                    status.write("🎉 APK එක සාර්ථකව නිම කර ඇත!")
+                                    artifact_res = requests.get(latest_run["artifacts_url"], headers=headers).json()
+                                    if artifact_res.get("artifacts"):
+                                        art_id = artifact_res["artifacts"][0]["id"]
+                                        apk_download_url = f"https://github.com/{github_repo}/actions/artifacts/{art_id}"
+                                    break
+                                else:
+                                    st.error("❌ Cloud Build එක අසාර්ථක වුණා. ඔබගේ GitHub Actions Actions ලොග් බලන්න.")
+                                    break
+                        time.sleep(12)
+                    
+                    if apk_download_url:
+                        status.update(label="🎯 APK බිල්ඩ් එක 100% ක් සාර්ථකයි!", state="complete")
+                        st.balloons()
+                        st.link_button("📥 DOWNLOAD OFFICIAL APK (ZIP)", apk_download_url, use_container_width=True)
+                        st.write("💡 *සටහන: ලැබෙන ZIP ගොනුව දිගහැර (Extract) එහි ඇති සැබෑ APK එක දුරකථනයට ස්ථාපනය කරන්න.*")
+                    else:
+                        st.warning("⚠️ බිල්ඩ් එක නිම වීමට තව සුළු වෙලාවක් ගත වේ. කරුණාකර ඔබගේ GitHub Repository එකෙහි Actions ටැබ් එක පරීක්ෂා කරන්න.")
+                else:
+                    st.error(f"❌ GitHub එකට කෝඩ් එක දාන්න බැරි වුණා. කරුණාකර Token එක නිවැරදිදැයි බලන්න: {push_res.text}")
