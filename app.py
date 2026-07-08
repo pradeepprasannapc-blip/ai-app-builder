@@ -165,11 +165,33 @@ if st.button("🚀 GENERATE MASTER APP", use_container_width=True):
                     components.html(edited_code, height=580, scrolling=True)
                     st.markdown('</div>', unsafe_allow_html=True)
                 
-                # --- 7. APK EXPORT SECTION ---
+                # --- 7. EXPORT SECTION ---
                 st.markdown("---")
-                st.subheader("📦 Export Package (APK / AAB)")
-                st.write("ඔබගේ ඇප් එක දැන් සූදානම්! මීළඟ අදියරේදී අපි මෙතනින් කෙලින්ම APK එක Download කරගන්නා Cloud Build System එක සම්බන්ධ කරමු.")
-                st.button("⚙️ Compile & Download APK (Coming Soon)", disabled=True, use_container_width=True)
+                st.subheader("📦 Export Your App")
+                st.write("ඔබගේ යෙදුම දැන් සූදානම්! මෙය භාගත කර තත්පර කිහිපයකින් APK එකක් බවට පත් කරගන්න.")
                 
+                col3, col4 = st.columns(2)
+                with col3:
+                    # HTML ෆයිල් එක කෙලින්ම Download කරන බටන් එක
+                    st.download_button(
+                        label="💾 Download Source Code (.html)",
+                        data=html_code,
+                        file_name="my_premium_app.html",
+                        mime="text/html",
+                        use_container_width=True
+                    )
+                with col4:
+                    # APK එක හදන Cloud පද්ධතියට යන ලින්ක් එක
+                    st.link_button("⚙️ Convert to APK (Free Cloud Builder)", "https://www.webintoapp.com/", use_container_width=True)
+                    
+                # පරිශීලකයාට උපදෙස්
+                st.info("""
+                💡 **APK එක සාදාගන්නා ආකාරය (පියවර 3යි):**
+                1. වම් පස ඇති බටන් එක ඔබා `my_premium_app.html` ගොනුව ඔබගේ පරිගණකයට/දුරකථනයට Download කරගන්න.
+                2. දකුණු පස ඇති බටන් එක ඔබා Cloud Builder අඩවියට පිවිසෙන්න.
+                3. එහි 'Files' විකල්පය තෝරා ඔබ භාගත කරගත් ගොනුව ලබා දී "Make App" ඔබන්න. ඔබගේ APK එක සූදානම්!
+                """)
+
+
             except Exception as e:
                 st.error(f"❌ දෝෂයක් මතු විය: {e}")
