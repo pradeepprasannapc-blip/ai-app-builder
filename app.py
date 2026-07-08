@@ -27,19 +27,60 @@ st.markdown("""
 
 if "app_code" not in st.session_state:
     st.session_state.app_code = None
-
-# --- 2. SECRETS & SIDEBAR (GitHub Config) ---
+# --- 2. SECRETS & OAUTH LOGIN ---
 default_gemini_key = st.secrets.get("GEMINI_KEY", "")
+client_id = st.secrets.get("GITHUB_CLIENT_ID", "")
+client_secret = st.secrets.get("GITHUB_CLIENT_SECRET", "")
+
+if "github_token" not in st.session_state:
+    st.session_state.github_token = None
 
 with st.sidebar:
     st.title("⚙️ Control Panel")
     gemini_key = st.text_input("Gemini API Key", value=default_gemini_key, type="password")
     
     st.markdown("---")
-    st.subheader("🐙 GitHub Account Connection")
-    github_token = st.text_input("GitHub Personal Access Token (PAT)", type="password", help="GitHub -> Settings -> Developer Settings -> Tokens (Classic) වලින් 'repo' සහ 'workflow' දමා ගන්න.")
-    github_repo = st.text_input("GitHub Repository Name", placeholder="username/repo-name")
+    st.subheader("🐙 GitHub Account Login")
     
+    # --- නියම GITHUB OAUTH LOGIN FLOW එක ---
+    # URL එකේ 'code' එකක් ඇවිත් තියෙනවද කියලා බලනවා (GitHub එකෙන් ආපසු එනකොට)
+    if "code" in st.query_params and not st.session_state.github_token:
+        auth_code = st.query_params["code"]
+        token_url = "https://github.com/login/oauth/access_token"
+        headers = {"Accept": "application/json"}
+        data = {
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "code": auth_code
+        }
+        res = requests.post(token_url, headers=headers, data=data).json()
+        
+        if "access_token" in res:
+            st.session_state.github_token = res["access_token"]
+            st.query_params.clear() # URL එක ක්ලියර් කරනවා ලස්සනට තියෙන්න
+            st.rerun()
+        else:
+            st.error("ලොගින් වීම අසාර්ථකයි!")
+
+    # බොත්තම පෙන්වීම හෝ ලොග් වී ඇති බව පෙන්වීම
+    if not st.session_state.github_token:
+        # ලොගින් ලින්ක් එක හැදීම (repo සහ workflow අවසර ඉල්ලමින්)
+        auth_url = f"https://github.com/login/oauth/authorize?client_id={client_id}&scope=repo%20workflow"
+        st.link_button("🔑 Login with GitHub", auth_url, type="primary", use_container_width=True)
+        st.caption("Base44 Pro හි මෙන් ඔබගේ ගිණුමට ආරක්ෂිතව ලොග් වන්න.")
+        
+        # ලොග් වෙලා නැත්නම් repo එක මැනුවල් ගහන්න දෙන්න පුළුවන්, හෝ disable කරන්න පුළුවන්
+        github_repo = st.text_input("GitHub Repository Name", placeholder="username/repo-name", disabled=True)
+        github_token = ""
+    else:
+        st.success("✅ GitHub ගිණුමට සාර්ථකව ලොග් වී ඇත")
+        if st.button("🚪 Logout"):
+            st.session_state.github_token = None
+            st.rerun()
+            
+        github_token = st.session_state.github_token
+        github_repo = st.text_input("GitHub Repository Name", placeholder="username/repo-name", help="ඔබගේ කේතය සෑදිය යුතු රෙපෝ එකේ නම දෙන්න.")
+
     st.markdown("---")
     st.subheader("🤖 AI Model")
     selected_model = st.selectbox("Select Model:", ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-flash"], index=0)
@@ -48,37 +89,6 @@ with st.sidebar:
         st.session_state.app_code = None
         st.rerun()
 
-# --- 3. MAIN INTERFACE ---
-st.title("⚡ AI App Factory (Base44 Pro Edition)")
-st.write("ඔබගේ අදහස ලබා දෙන්න. GitHub Actions හරහා සැබෑ APK එකක් පසුබිමෙන් බිල්ඩ් කරගන්න.")
-
-tab1, tab2, tab3 = st.tabs(["💡 App Idea", "🌐 Web URL Scanner", "🐙 GitHub Repository"])
-user_context, source_info = "", ""
-
-with tab1:
-    idea_input = st.text_area("ඔබට අවශ්‍ය ඇප් එක ගැන විස්තර කරන්න:", height=120, placeholder="උදා: Trading signals පෙන්නන ලස්සන Dark Mode ඇප් එකක්...")
-    if idea_input: user_context, source_info = f"පරිශීලක අදහස: {idea_input}", "Text Idea"
-
-with tab2:
-    url_input = st.text_input("ස්කෑන් කිරීමට අවශ්‍ය වෙබ් අඩවියේ URL එක දමන්න:")
-    if url_input: user_context, source_info = f"වෙබ් අඩවියේ URL එක: {url_input}. මීට සමාන ඇප් එකක් සාදන්න.", f"Web URL ({url_input})"
-
-with tab3:
-    github_input = st.text_input("කියවීමට අවශ්‍ය GitHub Repo URL එක දමන්න (Public):")
-    if github_input:
-        with st.spinner("GitHub Repository එක කියවමින් පවතී..."):
-            try:
-                repo_api_url = github_input.replace("github.com", "api.github.com/repos").rstrip("/") + "/contents"
-                res = requests.get(repo_api_url, headers={"User-Agent": "Mozilla/5.0"})
-                if res.status_code == 200:
-                    files_list = [f['name'] for f in res.json() if isinstance(f, dict) and 'name' in f]
-                    user_context = f"GitHub Repo: {github_input}. එහි අඩංගු ෆයිල්ස්: {', '.join(files_list)}. මීට ගැළපෙන සුපිරි ඇප් එකක් සාදන්න."
-                    source_info = f"Real GitHub Repo Scanner"
-                    st.success("🐙 GitHub Repo එක සාර්ථකව ස්කෑන් කර හඳුනාගන්නා ලදී!")
-                else:
-                    user_context = f"GitHub Repo URL: {github_input}"
-            except:
-                user_context = f"GitHub Repo URL: {github_input}"
 
 # --- 4. ENGINE START ---
 if st.button("🚀 GENERATE MASTER APP", use_container_width=True):
