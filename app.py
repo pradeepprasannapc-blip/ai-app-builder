@@ -114,7 +114,6 @@ with tab2:
     if url_input: user_context, source_info = f"වෙබ් අඩවියේ URL එක: {url_input}.", f"Web URL ({url_input})"
 
 with tab3:
-    # 💡 FIX: Sidebar එකේ තෝරපු Repo එක ඉබේම මෙතන පිරවෙනවා!
     github_input = st.text_input("කියවීමට අවශ්‍ය GitHub Repo URL එක හෝ නම දමන්න:", value=github_repo, placeholder="username/repo-name")
     if github_input:
         with st.spinner("GitHub Repository එක පරීක්ෂා කරමින් පවතී..."):
@@ -206,64 +205,54 @@ if st.session_state.app_code:
             else:
                 st.error(f"❌ GitHub අප්ලෝඩ් එක අසාර්ථකයි: {push_res.text}")
 
-    # --- 7. LIVE COMPILER TRACKER (BUG FIXED) ---
+    # --- 7. LIVE COMPILER TRACKER (STREAMLIT CLOUD SAFE) ---
     if st.session_state.build_running:
-        with st.status("🛠️ Cloud Build එක සිදුවෙමින් පවතී...", expanded=True) as status:
+        with st.status("🛠️ Cloud Build එක සිදුවෙමින් පවතී... (කරුණාකර රැඳී සිටින්න)", expanded=True) as status:
             for log in st.session_state.build_log: 
                 status.write(log)
-            
-            # Live status text එක පෙන්වීමට Placeholder එකක්
-            status_placeholder = st.empty() 
             
             headers = {"Authorization": f"token {github_token}", "Accept": "application/vnd.github.v3+json"}
             runs_url = f"https://api.github.com/repos/{github_repo}/actions/runs"
             
-            # GitHub එකට Action එක register වෙන්න තත්පර කිහිපයක් ලබා දීම
-            time.sleep(3) 
-            
             try:
-                is_completed = False
-                while not is_completed:
-                    run_res = requests.get(runs_url, headers=headers).json()
+                run_res = requests.get(runs_url, headers=headers).json()
+                
+                if "workflow_runs" in run_res and len(run_res["workflow_runs"]) > 0:
+                    latest_run = run_res["workflow_runs"][0]
+                    status_git = latest_run["status"]
+                    conclusion = latest_run["conclusion"]
                     
-                    if "workflow_runs" in run_res and len(run_res["workflow_runs"]) > 0:
-                        latest_run = run_res["workflow_runs"][0]
-                        status_git = latest_run["status"]
-                        conclusion = latest_run["conclusion"]
-                        
-                        status_placeholder.write(f"⏳ Cloud Compiler තත්ත්වය: **{status_git.upper()}**")
-                        
-                        if status_git == "completed":
-                            is_completed = True
-                            st.session_state.build_running = False
-                            
-                            if conclusion == "success":
-                                # Artifact (APK) එක ලබා ගැනීම
-                                artifact_res = requests.get(latest_run["artifacts_url"], headers=headers).json()
-                                if artifact_res.get("artifacts"):
-                                    art_id = artifact_res["artifacts"][0]["id"]
-                                    st.session_state.apk_url = f"https://github.com/{github_repo}/actions/artifacts/{art_id}"
-                                    status.update(label="🎯 APK බිල්ඩ් එක සාර්ථකයි!", state="complete", expanded=False)
-                                else:
-                                    st.error("⚠️ APK ෆයිල් එක සොයාගත නොහැක.")
-                                    status.update(label="⚠️ Artifact Missing", state="error")
+                    status.write(f"⏳ Cloud Compiler තත්ත්වය: **{status_git.upper()}**")
+                    
+                    if status_git == "completed":
+                        st.session_state.build_running = False
+                        if conclusion == "success":
+                            artifact_res = requests.get(latest_run["artifacts_url"], headers=headers).json()
+                            if artifact_res.get("artifacts"):
+                                art_id = artifact_res["artifacts"][0]["id"]
+                                st.session_state.apk_url = f"https://github.com/{github_repo}/actions/artifacts/{art_id}"
+                                status.update(label="🎯 APK බිල්ඩ් එක සාර්ථකයි!", state="complete", expanded=False)
                             else:
-                                st.error("❌ Cloud Build එක අසාර්ථක වුණා. GitHub වල Actions ටැබ් එක බලන්න.")
-                                status.update(label="❌ Build Failed", state="error")
-                            
-                            # අවසානයේදී පමණක් පිටුව Rerun කිරීම
-                            st.rerun() 
+                                st.error("⚠️ APK ෆයිල් එක සොයාගත නොහැක.")
+                                status.update(label="⚠️ Artifact Missing", state="error")
                         else:
-                            # තවම build වෙනවා නම් තත්පර 5ක් රැඳී සිටීම (Rerun නොකර)
-                            time.sleep(5) 
+                            st.error("❌ Cloud Build එක අසාර්ථක වුණා. GitHub වල Actions ටැබ් එක බලන්න.")
+                            status.update(label="❌ Build Failed", state="error")
+                        
+                        # සාර්ථක වූ පසු අවසාන වතාවට පිටුව refresh කිරීම
+                        st.rerun() 
                     else:
-                        status_placeholder.write("⏳ GitHub Actions පණගැන්වෙමින් පවතී... (කරුණාකර රැඳී සිටින්න)")
-                        time.sleep(5)
-            
+                        # Timeout වීම වැළැක්වීමට තත්පර 10ක් රැඳී සිට නැවත පිටුව refresh කිරීම
+                        time.sleep(10)
+                        st.rerun()
+                else:
+                    status.write("⏳ GitHub Actions පණගැන්වෙමින් පවතී...")
+                    time.sleep(10)
+                    st.rerun()
+                    
             except Exception as e:
-                st.session_state.build_running = False
-                st.error(f"Error Tracking Build: {e}")
-                status.update(label="❌ Error occurred", state="error")
+                status.write("⚠️ ජාලයේ ගැටලුවක්. නැවත පරීක්ෂා කරමින් පවතී...")
+                time.sleep(10)
                 st.rerun()
 
     if st.session_state.apk_url:
