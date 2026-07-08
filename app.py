@@ -115,7 +115,7 @@ with tab2:
 with tab3:
     github_input = st.text_input("කියවීමට අවශ්‍ය GitHub Repo URL එක හෝ නම දමන්න:", value=github_repo, placeholder="username/repo-name")
     if github_input:
-        with st.spinner("GitHub Repository එක පරීක්ෂා කරමින් පවතී..."):
+        with st.spinner("GitHub Repository එක ගැඹුරින් පරීක්ෂා කරමින් පවතී..."):
             try:
                 clean_input = github_input.strip()
                 repo_path = clean_input.split("github.com/")[-1].rstrip("/") if "github.com/" in clean_input else clean_input.rstrip("/")
@@ -124,10 +124,22 @@ with tab3:
                 res = requests.get(repo_api_url, headers={"User-Agent": "Mozilla/5.0"})
                 
                 if res.status_code == 200:
-                    files_list = [f['name'] for f in res.json() if isinstance(f, dict) and 'name' in f]
-                    user_context = f"GitHub Repo: {repo_path}. ෆයිල්ස්: {', '.join(files_list)}. මීට ගැළපෙන ඇප් එකක් සාදන්න."
+                    files_list = []
+                    readme_content = ""
+                    
+                    # 💡 UPGRADE: Repo එකේ ඇත්ත Content එක කියවීම
+                    for f in res.json():
+                        if isinstance(f, dict) and 'name' in f:
+                            files_list.append(f['name'])
+                            if f['name'].lower() in ['readme.md', 'app.py', 'index.js']:
+                                if 'download_url' in f and f['download_url']:
+                                    file_res = requests.get(f['download_url'])
+                                    if file_res.status_code == 200:
+                                        readme_content += f"\n--- {f['name']} ---\n{file_res.text[:1000]}"
+                    
+                    user_context = f"GitHub Repo: {repo_path}. \nFiles: {', '.join(files_list)}. \nProject Content Snippets: {readme_content}\nමීට ගැළපෙන, සම්පූර්ණයෙන්ම වැඩ කරන ඇප් එකක් සාදන්න."
                     source_info = f"GitHub Scanner ({repo_path})"
-                    st.success("🐙 GitHub Repo එක සාර්ථකව හඳුනාගන්නා ලදී!")
+                    st.success("🐙 GitHub Repo එකේ අන්තර්ගතය සාර්ථකව කියවන ලදී!")
                 else:
                     user_context = f"GitHub Repo: {repo_path}."
                     source_info = f"GitHub Repo Manual"
@@ -135,18 +147,34 @@ with tab3:
                 user_context = f"GitHub Repo: {github_input}"
                 source_info = "GitHub Fallback"
 
-# --- 4. ENGINE START ---
+# --- 4. ENGINE START (ADVANCED FULL-STACK PROMPT) ---
 if st.button("🚀 GENERATE MASTER APP", use_container_width=True):
     if not gemini_key:
         st.error("👈 කරුණාකර ප්‍රථමයෙන් Gemini API Key එක ලබා දෙන්න.")
     elif not user_context:
         st.warning("⚠️ කරුණාකර තොරතුරු ඇතුළත් කරන්න.")
     else:
-        with st.spinner("AI මාදිලිය මඟින් කේතය ලියමින් පවතී..."):
+        with st.spinner("AI මාදිලිය මඟින් සම්පූර්ණ App එක ලියමින් පවතී... (මඳක් රැඳී සිටින්න)"):
             try:
                 genai.configure(api_key=gemini_key)
-                model = genai.GenerativeModel(selected_model)
-                master_prompt = f"ඔබ Premium UI Developer කෙනෙක්. මූලාශ්‍රය: {source_info}. විස්තරය: {user_context}. කරුණාකර Tailwind CSS සහ ලස්සන Dark Mode සහිත සම්පූර්ණ Single HTML කේතය පමණක් ```html සහ ``` අතර ලබා දෙන්න."
+                # වචන ගණන සීමාව වැඩි කිරීම (Max Output Tokens)
+                model = genai.GenerativeModel(selected_model, generation_config={"max_output_tokens": 8192})
+                
+                # 💡 UPGRADE: අතිශය දියුණු Master Prompt එක
+                master_prompt = f"""ඔබ ලෝකයේ සිටින දක්ෂතම Full-Stack Mobile App Developer සහ UI/UX Designer කෙනෙකි.
+                මූලාශ්‍රය: {source_info}. විස්තරය සහ කේතය: {user_context}. 
+                
+                ඔබගේ කාර්යය වන්නේ ඉහත Project එකට අදාළව, ජංගම දුරකථන සඳහා සම්පූර්ණයෙන්ම ක්‍රියාත්මක වන (Fully Functional) Single Page Application (SPA) එකක් නිර්මාණය කිරීමයි.
+                
+                අනිවාර්ය අවශ්‍යතා:
+                1. Premium UI: Tailwind CSS භාවිතයෙන් අතිශය නවීන, ආකර්ෂණීය Dark Mode UI එකක් සාදන්න. Glassmorphism, Box Shadows සහ Smooth CSS animations භාවිතා කරන්න.
+                2. Real Functionality: කේතයේ ඇති බොත්තම්, Side menus, සහ Bottom Navigation අනිවාර්යයෙන්ම වැඩ කළ යුතුය. JavaScript භාවිතයෙන් පිටු අතර (Sections) මාරු වීම සකසන්න (Hide/Show divs).
+                3. Business Logic: යෙදුමේ ප්‍රධාන කාර්යයන් සඳහා අවශ්‍ය JavaScript Logic (උදා: Forms submit වීම, ගණනය කිරීම්, දත්ත පෙන්නුම් කිරීම) අනිවාර්යයෙන්ම ලියන්න.
+                4. Data Storage: API සම්බන්ධතා නොමැති තැන් වලදී දත්ත අහිමි නොවීම සඳහා LocalStorage භාවිතා කර දත්ත Save සහ Load වීමට සකසන්න. 
+                5. Font & Icons: Google Fonts (Poppins) සහ FontAwesome icons භාවිතා කරන්න.
+                
+                කිසිදු පැහැදිලි කිරීමක් අවශ්‍ය නැත. සම්පූර්ණ HTML, CSS (Tailwind), සහ අදාළ සියලුම JavaScript කේතයන් එකම කේතයක් ලෙස ```html සහ ``` අතර පමණක් ලබා දෙන්න."""
+                
                 response = model.generate_content(master_prompt)
                 match = re.search(r'```html(.*?)```', response.text, re.DOTALL | re.IGNORECASE)
                 st.session_state.app_code = match.group(1).strip() if match else response.text.strip()
@@ -177,7 +205,6 @@ if st.session_state.app_code:
         else:
             headers = {"Authorization": f"token {github_token}", "Accept": "application/vnd.github.v3+json"}
             
-            # Workflow Auto-Inject
             wf_url = f"https://api.github.com/repos/{github_repo}/contents/.github/workflows/build.yml"
             wf_check = requests.get(wf_url, headers=headers)
             if wf_check.status_code != 200:
@@ -185,7 +212,6 @@ if st.session_state.app_code:
                 wf_payload = {"message": "Auto-setup Cloud Build Workflow", "content": base64.b64encode(yaml_content.encode('utf-8')).decode('utf-8')}
                 requests.put(wf_url, headers=headers, json=wf_payload)
             
-            # Code Upload
             file_url = f"https://api.github.com/repos/{github_repo}/contents/index.html"
             sha = ""
             get_res = requests.get(file_url, headers=headers)
@@ -227,9 +253,7 @@ if st.session_state.app_code:
                             artifact_res = requests.get(latest_run["artifacts_url"], headers=headers).json()
                             if artifact_res.get("artifacts"):
                                 art_id = artifact_res["artifacts"][0]["id"]
-                                run_id = latest_run["id"] # 💡 404 Error එක විසඳීමට එක් කළ කොටස
-                                
-                                # නිවැරදි GitHub Download URL එක
+                                run_id = latest_run["id"] 
                                 st.session_state.apk_url = f"https://github.com/{github_repo}/actions/runs/{run_id}/artifacts/{art_id}"
                             else:
                                 st.error("⚠️ APK ෆයිල් එක සොයාගත නොහැක.")
