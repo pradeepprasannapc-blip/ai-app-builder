@@ -203,11 +203,10 @@ if st.session_state.app_code:
             else:
                 st.error(f"❌ GitHub අප්ලෝඩ් එක අසාර්ථකයි: {push_res.text}")
 
-    # --- 7. MANUAL COMPILER TRACKER (100% TIMEOUT SAFE) ---
+    # --- 7. MANUAL COMPILER TRACKER (100% TIMEOUT SAFE & 404 FIXED) ---
     if st.session_state.build_running:
         st.info("🛠️ Cloud Build එක සිදුවෙමින් පවතී... මෙය සාමාන්‍යයෙන් විනාඩි 2-3ක් ගත වේ.")
         
-        # අලුත් Manual බොත්තම මෙතනින් එක් කර ඇත
         if st.button("🔄 තත්ත්වය පරීක්ෂා කරන්න (Check Status)", use_container_width=True):
             headers = {"Authorization": f"token {github_token}", "Accept": "application/vnd.github.v3+json"}
             runs_url = f"https://api.github.com/repos/{github_repo}/actions/runs"
@@ -228,7 +227,10 @@ if st.session_state.app_code:
                             artifact_res = requests.get(latest_run["artifacts_url"], headers=headers).json()
                             if artifact_res.get("artifacts"):
                                 art_id = artifact_res["artifacts"][0]["id"]
-                                st.session_state.apk_url = f"https://github.com/{github_repo}/actions/artifacts/{art_id}"
+                                run_id = latest_run["id"] # 💡 404 Error එක විසඳීමට එක් කළ කොටස
+                                
+                                # නිවැරදි GitHub Download URL එක
+                                st.session_state.apk_url = f"https://github.com/{github_repo}/actions/runs/{run_id}/artifacts/{art_id}"
                             else:
                                 st.error("⚠️ APK ෆයිල් එක සොයාගත නොහැක.")
                         else:
