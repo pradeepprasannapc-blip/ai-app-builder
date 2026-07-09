@@ -1,7 +1,6 @@
 import streamlit as st
 import google.generativeai as genai
 import streamlit.components.v1 as components
-import re
 import requests
 import base64
 import time
@@ -146,7 +145,7 @@ with tab3:
                 user_context = f"GitHub Repo: {github_input}"
                 source_info = "GitHub Fallback"
 
-# --- 4. ENGINE START (BULLETPROOF CODE EXTRACTOR & ADVANCED PROMPT) ---
+# --- 4. ENGINE START ---
 if st.button("🚀 GENERATE MASTER APP", use_container_width=True):
     if not gemini_key:
         st.error("👈 කරුණාකර ප්‍රථමයෙන් Gemini API Key එක ලබා දෙන්න.")
@@ -166,15 +165,15 @@ if st.button("🚀 GENERATE MASTER APP", use_container_width=True):
                 අනිවාර්ය අවශ්‍යතා:
                 1. Premium UI: Tailwind CSS භාවිතයෙන් අතිශය නවීන, ආකර්ෂණීය Dark Mode UI එකක් සාදන්න. Glassmorphism, Box Shadows සහ Smooth CSS animations භාවිතා කරන්න.
                 2. Real Functionality: කේතයේ ඇති බොත්තම්, Side menus, සහ Bottom Navigation අනිවාර්යයෙන්ම වැඩ කළ යුතුය. JavaScript භාවිතයෙන් පිටු අතර (Sections) මාරු වීම සකසන්න (Hide/Show divs).
-                3. Business Logic: යෙදුමේ ප්‍රධාන කාර්යයන් සඳහා අවශ්‍ය JavaScript Logic (උදා: Forms submit වීම, ගණනය කිරීම්, දත්ත පෙන්නුම් කිරීම) අනිවාර්යයෙන්ම ලියන්න.
+                3. Business Logic: යෙදුමේ ප්‍රධාන කාර්යයන් සඳහා අවශ්‍ය JavaScript Logic අනිවාර්යයෙන්ම ලියන්න.
                 4. Data Storage: LocalStorage භාවිතා කර දත්ත Save සහ Load වීමට සකසන්න. 
                 5. Font & Icons: Google Fonts (Poppins) සහ FontAwesome icons භාවිතා කරන්න.
+                6. NO LOADING SCREENS: කිසිම ආකාරයක Splash screens, loading animations හෝ fake loaders භාවිතා නොකරන්න. කේතය ක්‍රියාත්මක වූ වහාම පරිශීලකයාට කෙලින්ම Main Dashboard එක හෝ ප්‍රධාන අතුරුමුහුණත (Main UI) දිස්විය යුතුය.
                 
                 කිසිදු පැහැදිලි කිරීමක් අවශ්‍ය නැත. ඔබ ලබා දෙන කේතය කිසිම විටෙක ```html හෝ වෙනත් markdown tags වලින් wrap කරන්න එපා. කේතය කෙලින්ම <!DOCTYPE html> වලින් ආරම්භ කර </html> වලින් අවසන් කරන්න."""
                 
                 response = model.generate_content(master_prompt)
                 
-                # Bulletproof Extractor
                 raw_code = response.text.strip()
                 if raw_code.lower().startswith("```html"):
                     raw_code = raw_code[7:].strip()
@@ -236,7 +235,7 @@ if st.session_state.app_code:
             else:
                 st.error(f"❌ GitHub අප්ලෝඩ් එක අසාර්ථකයි: {push_res.text}")
 
-    # --- 7. MANUAL COMPILER TRACKER (100% TIMEOUT SAFE & 404 FIXED) ---
+    # --- 7. MANUAL COMPILER TRACKER ---
     if st.session_state.build_running:
         st.info("🛠️ Cloud Build එක සිදුවෙමින් පවතී... මෙය සාමාන්‍යයෙන් විනාඩි 2-3ක් ගත වේ.")
         
