@@ -131,24 +131,29 @@ with tab2:
 with tab3:
     github_input = st.text_input("කියවීමට අවශ්‍ය GitHub Repo URL එක හෝ නම දමන්න:", value=github_repo, placeholder="username/repo-name")
     if github_input:
-        with st.spinner("GitHub Repository එක ගැඹුරින් පරීක්ෂා කරමින් පවතී..."):
+        with st.spinner("GitHub Repository එක ගැඹුරින් පරීක්ෂා කරමින් පවතී (Deep Scan)..."):
             try:
                 repo_path = github_input.strip().split("github.com/")[-1].rstrip("/") if "github.com/" in github_input else github_input.strip().rstrip("/")
                 gh_contents_url = base64.b64decode("aHR0cHM6Ly9hcGkuZ2l0aHViLmNvbS9yZXBvcy8=").decode('utf-8') + f"{repo_path}/contents"
                 res = requests.get(gh_contents_url, headers={"User-Agent": "Mozilla/5.0"})
                 if res.status_code == 200:
                     files_list, readme_content = [], ""
+                    # 💡 FIX 1: Deep File Scanner - Read multiple file types, not just 4 files.
+                    valid_extensions = ('.md', '.py', '.js', '.jsx', '.ts', '.tsx', '.json', '.html', '.css')
+                    
                     for f in res.json():
                         if isinstance(f, dict) and 'name' in f:
                             files_list.append(f['name'])
-                            if f['name'].lower() in ['readme.md', 'app.py', 'index.js', 'main.py']:
+                            if f['name'].lower().endswith(valid_extensions):
                                 if 'download_url' in f and f['download_url']:
                                     file_res = requests.get(f['download_url'])
                                     if file_res.status_code == 200:
-                                        readme_content += f"\\n--- {f['name']} ---\\n{file_res.text[:1500]}"
-                    user_context = f"GitHub Repo: {repo_path}. \\nFiles: {', '.join(files_list)}. \\nProject Snippets: {readme_content}\\nCreate a MATCHING app based EXACTLY on these algorithms."
-                    source_info = f"GitHub Scanner ({repo_path})"
-                    st.success("🐙 GitHub Repo එකේ අන්තර්ගතය සාර්ථකව කියවන ලදී!")
+                                        # Increase character limit per file to catch more logic
+                                        readme_content += f"\\n--- {f['name']} ---\\n{file_res.text[:2000]}"
+                    
+                    user_context = f"GitHub Repo: {repo_path}. \\nFiles Found: {', '.join(files_list)}. \\nProject Code Snippets: {readme_content}\\nCreate a COMPREHENSIVE app combining ALL of this logic."
+                    source_info = f"GitHub Deep Scanner ({repo_path})"
+                    st.success("🐙 GitHub Repo එකේ සියලුම ප්‍රධාන ගොනු සාර්ථකව කියවන ලදී!")
                 else:
                     user_context, source_info = f"GitHub Repo: {repo_path}.", "GitHub Repo Manual"
             except:
@@ -163,21 +168,22 @@ if st.button("🚀 GENERATE MASTER APP", use_container_width=True):
     else:
         with st.spinner(f"{ai_provider.split(' ')[0]} AI මඟින් Premium කේතය ලියමින් පවතී... (මඳක් රැඳී සිටින්න)"):
             try:
-                # 🚀 DYNAMIC, CONTEXT-AWARE PREMIUM PROMPT 🚀
-                master_prompt = f\"\"\"You are a World-Class Principal UI/UX Engineer and Full-Stack Mobile App Developer.
+                # 🚀 💡 FIX 2: AUTH & ADMIN ROLE BASED PROMPT 💡 🚀
+                master_prompt = f\"\"\"You are a World-Class Principal UI/UX Engineer and Full-Stack Architect.
 Source: {source_info}. Context: {user_context}.
 
-CRITICAL MISSION: Build an ultra-premium, visually stunning Single Page Application (SPA) for Mobile based EXACTLY on the user's context/repo. Do NOT default to a trading app unless the context implies it. Adapt your UI/UX to the specific domain (e.g., E-commerce, Social, Utility, Finance).
+CRITICAL MISSION: Build an ultra-premium, visually stunning, fully comprehensive Single Page Application (SPA) based EXACTLY on the user's repo/context. 
 
-CRITICAL TECHNICAL RULES:
-1. **DOMAIN ADAPTATION**: Analyze the Context/Repo. If it's a Trading app, use TradingView/Chart.js and order books. If it's E-commerce, build beautiful product grids and cart UI. If it's Social, build elegant feeds. Match the UI vibe perfectly to the use-case.
-2. **ULTRA-PREMIUM UI**: Use Tailwind CSS (`<script src="https://cdn.tailwindcss.com"></script>`). Create a breathtaking, modern design (e.g., glassmorphism, beautiful gradients, subtle borders, high-end typography). Use FontAwesome (`<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">`).
-3. **SPA NAVIGATION (CRITICAL FOR IFRAME)**: 
-   - Create at least 4 distinct functional screens/tabs.
-   - Switch them using JavaScript (`display: none` / `block`). 
-   - ABSOLUTELY NEVER use `<a href>` for internal navigation! It crashes the iframe. Use `<button onclick="...">` or `<div onclick="...">`.
-4. **DENSITY & MOCK DATA**: No empty states! Provide highly detailed JavaScript arrays for mock data. Fill the UI with realistic content (images, names, metrics, timestamps).
-5. **GITHUB REPO COMPLETENESS**: If a repo is provided, you MUST integrate ALL its implied logic, algorithms, and features into this UI. Make the UI functional to represent the repo's purpose.
+CRITICAL TECHNICAL & ARCHITECTURE RULES:
+1. **AUTHENTICATION FIRST (MANDATORY)**: The app MUST start with a beautiful, professional Login/Signup screen. Users CANNOT see the main app until they "log in". Build the JS logic to hide the login screen and show the app when a button is clicked.
+2. **ROLE-BASED ACCESS CONTROL (ADMIN VS USER)**: 
+   - You MUST create separate views/dashboards for 'Regular Users' and 'Admins'. 
+   - Hide sensitive information, settings, and repo-specific backend controls in a dedicated "Admin Panel".
+   - (Mock this logic: if login is 'admin', show admin tabs; otherwise show regular tabs).
+3. **COMPREHENSIVE INTEGRATION**: The user complained that previous apps left out files. You MUST analyze ALL provided code snippets. Do NOT leave out any feature. If the repo has 10 features, build UI for ALL 10 features. Combine them into one massive, cohesive platform.
+4. **DOMAIN ADAPTATION**: If Trading: use TradingView charts & order books. If E-commerce: Product grids & Cart. Match the UI vibe perfectly.
+5. **ULTRA-PREMIUM UI**: Use Tailwind CSS (`<script src="https://cdn.tailwindcss.com"></script>`). Use glassmorphism, beautiful gradients, subtle borders, high-end typography, and FontAwesome (`<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">`).
+6. **SPA NAVIGATION**: Switch tabs using JavaScript (`display: none` / `block`). ABSOLUTELY NEVER use `<a href>` for internal navigation! It crashes the iframe.
 
 Output ONLY raw HTML code (starting with <!DOCTYPE html> and ending with </html>). NO Markdown, NO explanations.\"\"\"
                 
@@ -305,7 +311,7 @@ jobs:
     # --- 7. MANUAL COMPILER TRACKER ---
     if st.session_state.build_running:
         st.info("🛠️ Cloud Build එක සිදුවෙමින් පවතී... මෙය සාමාන්‍යයෙන් විනාඩි 2-3ක් ගත වේ.")
-        if st.button("🔄 තත්ත්වය පරීක්ෂා කරන්න (Check Status)", use_container_width=True):
+        if st.button("🔄 තත්ත්වය පරීක්ෂා জ্ঞකරන්න (Check Status)", use_container_width=True):
             try:
                 runs_api = base64.b64decode("aHR0cHM6Ly9hcGkuZ2l0aHViLmNvbS9yZXBvcy8=").decode('utf-8') + f"{github_repo}/actions/runs"
                 run_res = requests.get(runs_api, headers={"Authorization": f"Bearer {github_token}", "Accept": "application/vnd.github.v3+json"}).json()
