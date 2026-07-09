@@ -37,7 +37,6 @@ client_id = st.secrets.get("GITHUB_CLIENT_ID", "")
 client_secret = st.secrets.get("GITHUB_CLIENT_SECRET", "")
 supabase_url = st.secrets.get("SUPABASE_URL", "")
 supabase_key = st.secrets.get("SUPABASE_KEY", "")
-# 💡 අලුත්: Groq Key එකත් Secrets වලින් ගන්නවා
 groq_default_key = st.secrets.get("GROQ_API_KEY", "")
 
 with st.sidebar:
@@ -45,13 +44,12 @@ with st.sidebar:
     
     # --- MULTI-AI SETUP ---
     st.subheader("🤖 AI Engine")
-    ai_provider = st.selectbox("Select AI Provider:", ["Google Gemini (Default)", "Groq (High Speed/Free)"])
+    ai_provider = st.selectbox("Select AI Provider:", ["Google Gemini (Default)", "Groq (High Speed/Free)"], index=1)
     
     if ai_provider == "Google Gemini (Default)":
         api_key = st.text_input("Gemini API Key", type="password", value=st.secrets.get("GEMINI_KEY", ""))
         selected_model = st.selectbox("Select Model:", ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-2.5-flash"], index=0)
     else:
-        # 💡 FIX: Groq තේරූ වහාම API Key එකයි හොඳම Model එකයි Auto-set වෙනවා
         api_key = st.text_input("Groq API Key", type="password", value=groq_default_key)
         selected_model = st.selectbox("Select Model:", ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"], index=0)
     
@@ -113,10 +111,10 @@ user_context, source_info = "", ""
 
 with tab1:
     idea_input = st.text_area("ඔබට අවශ්‍ය ඇප් එක ගැන විස්තර කරන්න:", height=120, placeholder="උදා: Trading signals පෙන්නන ඇප් එකක්...")
-    if idea_input: user_context, source_info = f"පරිශීලක අදහස: {idea_input}", "Text Idea"
+    if idea_input: user_context, source_info = f"User Request: {idea_input}", "Text Idea"
 with tab2:
     url_input = st.text_input("ස්කෑන් කිරීමට අවශ්‍ය වෙබ් අඩවියේ URL එක දමන්න:")
-    if url_input: user_context, source_info = f"වෙබ් අඩවියේ URL එක: {url_input}.", f"Web URL ({url_input})"
+    if url_input: user_context, source_info = f"Web URL: {url_input}.", f"Web Scanner ({url_input})"
 with tab3:
     github_input = st.text_input("කියවීමට අවශ්‍ය GitHub Repo URL එක හෝ නම දමන්න:", value=github_repo, placeholder="username/repo-name")
     if github_input:
@@ -134,7 +132,7 @@ with tab3:
                                     file_res = requests.get(f['download_url'])
                                     if file_res.status_code == 200:
                                         readme_content += f"\n--- {f['name']} ---\n{file_res.text[:1000]}"
-                    user_context = f"GitHub Repo: {repo_path}. \nFiles: {', '.join(files_list)}. \nProject Snippets: {readme_content}\nමීට ගැළපෙන ඇප් එකක් සාදන්න."
+                    user_context = f"GitHub Repo: {repo_path}. \nFiles: {', '.join(files_list)}. \nProject Snippets: {readme_content}\nCreate a matching app based on this."
                     source_info = f"GitHub Scanner ({repo_path})"
                     st.success("🐙 GitHub Repo එකේ අන්තර්ගතය සාර්ථකව කියවන ලදී!")
                 else:
@@ -142,7 +140,7 @@ with tab3:
             except:
                 user_context, source_info = f"GitHub Repo: {github_input}", "GitHub Fallback"
 
-# --- 4. ENGINE START ---
+# --- 4. ENGINE START (STRICT ENGLISH PROMPT FOR GROQ) ---
 if st.button("🚀 GENERATE MASTER APP", use_container_width=True):
     if not api_key:
         st.error(f"👈 කරුණාකර ප්‍රථමයෙන් {ai_provider.split(' ')[0]} API Key එක ලබා දෙන්න.")
@@ -151,18 +149,24 @@ if st.button("🚀 GENERATE MASTER APP", use_container_width=True):
     else:
         with st.spinner(f"{ai_provider.split(' ')[0]} AI මඟින් කේතය ලියමින් පවතී... (මඳක් රැඳී සිටින්න)"):
             try:
-                master_prompt = f"""ඔබ ලෝකයේ සිටින දක්ෂතම Full-Stack Mobile App Developer කෙනෙකි.
-                මූලාශ්‍රය: {source_info}. විස්තරය: {user_context}. 
-                
-                කාර්යය: ජංගම දුරකථන සඳහා සම්පූර්ණයෙන්ම ක්‍රියාත්මක වන Single Page Application එකක් නිර්මාණය කිරීම.
-                
-                අනිවාර්ය නීති:
-                1. NEVER HIDE DASHBOARD: ප්‍රධාන Dashboard <div> එක මුල සිටම දෘශ්‍යමාන (Visible) විය යුතුය.
-                2. JS ERROR HANDLING: සියලුම JavaScript කේත අනිවාර්යයෙන්ම `try {{ ... }} catch(e) {{}}` block එකක් ඇතුළත ලියන්න.
-                3. BRANDING: යෙදුමේ නම '{custom_app_name}'. ලෝගෝව '{custom_logo_url}'.
-                4. PREMIUM UI: Tailwind CSS හරහා Dark Mode භාවිතා කරන්න.
-                
-                කිසිදු පැහැදිලි කිරීමක් අවශ්‍ය නැත. සම්පූර්ණ කේතය අනිවාර්යයෙන්ම "<!DOCTYPE html>" යන්නෙන් ආරම්භ වී "</html>" යන්නෙන් අවසන් විය යුතුය."""
+                master_prompt = f"""You are an Expert Full-Stack Mobile App Developer and UI/UX Designer.
+Source: {source_info}. Context: {user_context}.
+
+Task: Create a Fully Functional, visually stunning Single Page Application (SPA) for Mobile.
+
+CRITICAL RULES (YOU MUST STRICTLY FOLLOW THESE):
+1. **PREMIUM UI/UX (MANDATORY)**: You MUST include Tailwind CSS via CDN (`<script src="https://cdn.tailwindcss.com"></script>`). The app MUST have a modern dark theme (`bg-gray-900`, `text-white`). Use modern UI elements: Glassmorphism, rounded corners, soft gradients, and FontAwesome icons (`<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">`). DO NOT output a basic, unstyled HTML page.
+2. **APP STRUCTURE**: 
+   - **Top Header**: Fixed at the top, showing the App Name '{custom_app_name}'. Use a nice icon or the provided logo '{custom_logo_url}'.
+   - **Main Content Area**: Scrollable padding area. Create beautiful statistic cards, lists, or grids depending on the context.
+   - **Bottom Navigation**: Fixed at the bottom (`fixed bottom-0 w-full`) with at least 4 clickable icons (e.g., Dashboard, Portfolio, Signals, Settings).
+3. **FUNCTIONALITY & CHARTS**: If the app involves trading or data, you MUST include Chart.js (`<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>`) and render a beautiful, responsive chart. Use JS to switch between tabs when bottom nav items are clicked. 
+4. **MOCK DATA ONLY**: Do not use `fetch()` or external APIs. Hardcode visually realistic mock data inside JavaScript arrays.
+5. **NO BLANK SCREENS**: Ensure the main Dashboard section is visible by default (`style="display: block"`). Put all JavaScript execution inside `try-catch` blocks to prevent the app from crashing.
+6. **GITHUB REPO COMPLETENESS**: If the context provided is a GitHub Repository, you MUST deeply analyze the snippets and files. DO NOT leave out any functionalities. Recreate EVERY core feature, chart, and signal implied by the repo into a comprehensive, fully functional UI. Do not take shortcuts.
+
+OUTPUT FORMAT:
+Output ONLY the raw HTML code starting with `<!DOCTYPE html>` and ending with `</html>`. NO markdown code blocks (do not wrap in ```html), NO explanations, NO intro text."""
                 
                 raw_code = ""
                 
@@ -174,7 +178,7 @@ if st.button("🚀 GENERATE MASTER APP", use_container_width=True):
                 else:
                     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
                     payload = {"model": selected_model, "messages": [{"role": "user", "content": master_prompt}], "max_tokens": 8000}
-                    res = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload)
+                    res = requests.post("[https://api.groq.com/openai/v1/chat/completions](https://api.groq.com/openai/v1/chat/completions)", headers=headers, json=payload)
                     if res.status_code == 200:
                         raw_code = res.json()["choices"][0]["message"]["content"]
                     else:
@@ -224,13 +228,13 @@ if st.session_state.app_code:
             st.error("👈 කරුණාකර වම් පස ඇති Sidebar එකෙන් GitHub ගිණුමට ලොග් වී Repo එකක් තෝරන්න.")
         else:
             headers = {"Authorization": f"token {github_token}", "Accept": "application/vnd.github.v3+json"}
-            wf_url = f"https://api.github.com/repos/{github_repo}/contents/.github/workflows/build.yml"
+            wf_url = f"[https://api.github.com/repos/](https://api.github.com/repos/){github_repo}/contents/.github/workflows/build.yml"
             wf_check = requests.get(wf_url, headers=headers)
             if wf_check.status_code != 200:
                 yaml_content = """name: Build Android APK\non:\n  push:\n    branches: [ main ]\n  workflow_dispatch:\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n    - uses: actions/checkout@v3\n    - uses: actions/setup-node@v3\n      with:\n        node-version: 18\n    - run: npm install -g cordova\n    - run: |\n        cordova create myapp com.premium.aifactory AI_App\n        cd myapp\n        cordova platform add android\n        rm www/index.html\n        cp ../index.html www/index.html\n    - uses: actions/setup-java@v3\n      with:\n        distribution: 'zulu'\n        java-version: '17'\n    - uses: android-actions/setup-android@v3\n    - run: |\n        cd myapp\n        cordova build android --no-telemetry\n    - uses: actions/upload-artifact@v4\n      with:\n        name: premium-app-apk\n        path: myapp/platforms/android/app/build/outputs/apk/debug/app-debug.apk"""
                 requests.put(wf_url, headers=headers, json={"message": "Auto-setup Cloud Build Workflow", "content": base64.b64encode(yaml_content.encode('utf-8')).decode('utf-8')})
             
-            file_url = f"https://api.github.com/repos/{github_repo}/contents/index.html"
+            file_url = f"[https://api.github.com/repos/](https://api.github.com/repos/){github_repo}/contents/index.html"
             sha = ""
             get_res = requests.get(file_url, headers=headers)
             if get_res.status_code == 200: sha = get_res.json()['sha']
@@ -251,7 +255,7 @@ if st.session_state.app_code:
         st.info("🛠️ Cloud Build එක සිදුවෙමින් පවතී... මෙය සාමාන්‍යයෙන් විනාඩි 2-3ක් ගත වේ.")
         if st.button("🔄 තත්ත්වය පරීක්ෂා කරන්න (Check Status)", use_container_width=True):
             try:
-                run_res = requests.get(f"https://api.github.com/repos/{github_repo}/actions/runs", headers={"Authorization": f"token {github_token}", "Accept": "application/vnd.github.v3+json"}).json()
+                run_res = requests.get(f"[https://api.github.com/repos/](https://api.github.com/repos/){github_repo}/actions/runs", headers={"Authorization": f"token {github_token}", "Accept": "application/vnd.github.v3+json"}).json()
                 if "workflow_runs" in run_res and len(run_res["workflow_runs"]) > 0:
                     latest_run = run_res["workflow_runs"][0]
                     st.write(f"⏳ Cloud Compiler තත්ත්වය: **{latest_run['status'].upper()}**")
@@ -260,7 +264,7 @@ if st.session_state.app_code:
                         if latest_run['conclusion'] == "success":
                             art_res = requests.get(latest_run["artifacts_url"], headers={"Authorization": f"token {github_token}", "Accept": "application/vnd.github.v3+json"}).json()
                             if art_res.get("artifacts"):
-                                st.session_state.apk_url = f"https://github.com/{github_repo}/actions/runs/{latest_run['id']}/artifacts/{art_res['artifacts'][0]['id']}"
+                                st.session_state.apk_url = f"[https://github.com/](https://github.com/){github_repo}/actions/runs/{latest_run['id']}/artifacts/{art_res['artifacts'][0]['id']}"
                             else:
                                 st.error("⚠️ APK ෆයිල් එක සොයාගත නොහැක.")
                         else:
