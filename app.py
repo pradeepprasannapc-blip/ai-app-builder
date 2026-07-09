@@ -1,6 +1,7 @@
 import streamlit as st
 import google.generativeai as genai
 import streamlit.components.v1 as components
+import re
 import requests
 import base64
 import time
@@ -145,7 +146,7 @@ with tab3:
                 user_context = f"GitHub Repo: {github_input}"
                 source_info = "GitHub Fallback"
 
-# --- 4. ENGINE START ---
+# --- 4. ENGINE START (ULTIMATE BULLETPROOF EXTRACTOR) ---
 if st.button("🚀 GENERATE MASTER APP", use_container_width=True):
     if not gemini_key:
         st.error("👈 කරුණාකර ප්‍රථමයෙන් Gemini API Key එක ලබා දෙන්න.")
@@ -170,20 +171,29 @@ if st.button("🚀 GENERATE MASTER APP", use_container_width=True):
                 5. Font & Icons: Google Fonts (Poppins) සහ FontAwesome icons භාවිතා කරන්න.
                 6. NO LOADING SCREENS: කිසිම ආකාරයක Splash screens, loading animations හෝ fake loaders භාවිතා නොකරන්න. කේතය ක්‍රියාත්මක වූ වහාම පරිශීලකයාට කෙලින්ම Main Dashboard එක හෝ ප්‍රධාන අතුරුමුහුණත (Main UI) දිස්විය යුතුය.
                 
-                කිසිදු පැහැදිලි කිරීමක් අවශ්‍ය නැත. ඔබ ලබා දෙන කේතය කිසිම විටෙක ```html හෝ වෙනත් markdown tags වලින් wrap කරන්න එපා. කේතය කෙලින්ම <!DOCTYPE html> වලින් ආරම්භ කර </html> වලින් අවසන් කරන්න."""
+                අතිශය වැදගත් නියෝගය:
+                කිසිදු පැහැදිලි කිරීමක්, කතා කිරීමක් හෝ අදහස් දැක්වීමක් (Comments) අවශ්‍ය නැත. 
+                ඔබගේ සම්පූර්ණ පිළිතුර අනිවාර්යයෙන්ම "<!DOCTYPE html>" යන්නෙන් ආරම්භ වී "</html>" යන්නෙන් අවසන් විය යුතුය. 
+                වෙනත් කිසිදු අමතර වචනයක් හෝ සලකුණක් මුලට හෝ අගට එක් නොකරන්න."""
                 
                 response = model.generate_content(master_prompt)
+                raw_code = response.text
                 
-                raw_code = response.text.strip()
-                if raw_code.lower().startswith("```html"):
-                    raw_code = raw_code[7:].strip()
-                elif raw_code.startswith("```"):
-                    raw_code = raw_code[3:].strip()
+                # 💡 THE ULTIMATE REGEX EXTRACTOR
+                # AI එක මොනවා ලිව්වත්, <!DOCTYPE html> ඉඳලා </html> වෙනකන් විතරක් කපලා ගන්නවා
+                html_match = re.search(r'(<!DOCTYPE\s+html>.*?</html>)', raw_code, re.IGNORECASE | re.DOTALL)
                 
-                if raw_code.endswith("```"):
-                    raw_code = raw_code[:-3].strip()
+                if html_match:
+                    final_code = html_match.group(1).strip()
+                else:
+                    # Fallback (Just in case AI misses DOCTYPE)
+                    html_match_fallback = re.search(r'(<html.*?>.*?</html>)', raw_code, re.IGNORECASE | re.DOTALL)
+                    if html_match_fallback:
+                        final_code = html_match_fallback.group(1).strip()
+                    else:
+                        final_code = raw_code.replace("```html", "").replace("```", "").strip()
                     
-                st.session_state.app_code = raw_code
+                st.session_state.app_code = final_code
                 st.session_state.apk_url = None
                 st.rerun()
             except Exception as e:
