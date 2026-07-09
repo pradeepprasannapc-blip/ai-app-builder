@@ -40,6 +40,12 @@ with st.sidebar:
     st.title("⚙️ Control Panel")
     gemini_key = st.text_input("Gemini API Key", value=default_gemini_key, type="password")
     
+    # 💡 අලුත් කොටස: ලෝගෝ එක සහ නම වෙනස් කිරීම
+    st.markdown("---")
+    st.subheader("🎨 App Customization")
+    custom_app_name = st.text_input("App Name (ඇප් එකේ නම):", value="PRO AI Trading")
+    custom_logo_url = st.text_input("Logo URL (ලෝගෝ ලින්ක් එක):", placeholder="https://example.com/logo.png")
+    
     st.markdown("---")
     st.subheader("🐙 GitHub Account")
     
@@ -146,7 +152,7 @@ with tab3:
                 user_context = f"GitHub Repo: {github_input}"
                 source_info = "GitHub Fallback"
 
-# --- 4. ENGINE START (TRADING APP SUPER-PROMPT) ---
+# --- 4. ENGINE START (ULTIMATE PROMPT) ---
 if st.button("🚀 GENERATE MASTER APP", use_container_width=True):
     if not gemini_key:
         st.error("👈 කරුණාකර ප්‍රථමයෙන් Gemini API Key එක ලබා දෙන්න.")
@@ -158,18 +164,18 @@ if st.button("🚀 GENERATE MASTER APP", use_container_width=True):
                 genai.configure(api_key=gemini_key)
                 model = genai.GenerativeModel(selected_model, generation_config={"max_output_tokens": 8192})
                 
-                # 💡 FIX: අතිශය බලවත්, Trading Apps සඳහාම විශේෂිත වූ Prompt එක
                 master_prompt = f"""ඔබ ලෝකයේ සිටින දක්ෂතම Full-Stack Mobile App Developer සහ UI/UX Designer කෙනෙකි.
                 මූලාශ්‍රය: {source_info}. විස්තරය සහ කේතය: {user_context}. 
                 
                 ඔබගේ කාර්යය වන්නේ ජංගම දුරකථන සඳහා සම්පූර්ණයෙන්ම ක්‍රියාත්මක වන (Fully Functional) Single Page Application (SPA) එකක් නිර්මාණය කිරීමයි.
                 
                 අනිවාර්ය නීති (Strict Rules - MUST FOLLOW):
-                1. CONTENT IS KING: ප්‍රධාන තිරය (Main content area) කිසිවිටෙකත් හිස්ව නොතිබිය යුතුය. App එක විවෘත කළ වහාම Dashboard එක පෙනිය යුතුය. (HTML හි Dashboard <div> එකේ `display: block` ලෙසත්, අනෙකුත් <div> වල `display: none` ලෙසත් සකසන්න).
-                2. CHARTS & SIGNALS: 'Chart.js' CDN හරහා ලබාගෙන, අලංකාර Trading Chart එකක් අනිවාර්යයෙන්ම නිර්මාණය කරන්න. මීට අමතරව 'Buy/Sell' Signals, Win Rate, සහ Profit දත්ත සහිත ලස්සන Cards කිහිපයක් පෙන්වන්න.
-                3. MOCK DATA ONLY: කිසිම ආකාරයකින් External APIs (උදා: Fetch/Axios) භාවිතා නොකරන්න. App එක ක්‍රියාත්මක වීමට අවශ්‍ය සියලුම දත්ත (Mock Data) JavaScript ඇතුළතම තබාගන්න.
-                4. PREMIUM UI: Tailwind CSS හරහා Dark Mode, Glassmorphism, සහ Box Shadows භාවිතා කරන්න. Bottom Navigation එකක් අනිවාර්යයි.
-                5. NO FAKE LOADERS: Splash screens හෝ Loaders භාවිතා නොකරන්න.
+                1. BRANDING: යෙදුමේ නම ලෙස අනිවාර්යයෙන්ම '{custom_app_name}' භාවිතා කරන්න. '{custom_logo_url}' හි URL එකක් ලබා දී ඇත්නම්, එය Top Header හි ප්‍රධාන ලෝගෝව (<img> tag) ලෙස භාවිතා කරන්න. ලෝගෝවක් නැතිනම් ලස්සන SVG icon එකක් සාදන්න.
+                2. CHART BUG FIX (CRITICAL): Chart.js හෝ වෙනත් ප්‍රස්තාර යොදාගන්නේ නම්, අනිවාර්යයෙන්ම <canvas> element එක `<div style="position: relative; height: 300px; width: 100%;">` ලෙස ස්ථිර උසක් ඇති ඩිව් (div) එකක් ඇතුළත පමණක් තබන්න. JavaScript හි `options: {{ maintainAspectRatio: false }}` ලබා දෙන්න. ප්‍රස්තාරය දිගෑදී තිරය පහළට යාම මින් අනිවාර්යයෙන්ම වළකී.
+                3. CONTENT IS KING: ප්‍රධාන තිරය කිසිවිටෙකත් හිස්ව නොතිබිය යුතුය. App එක විවෘත කළ වහාම Dashboard එක පෙනිය යුතුය. 
+                4. MOCK DATA ONLY: External APIs භාවිතා නොකරන්න. App එක ක්‍රියාත්මක වීමට අවශ්‍ය සියලුම දත්ත (Mock Data) JavaScript ඇතුළතම තබාගන්න.
+                5. PREMIUM UI: Tailwind CSS හරහා Dark Mode, Glassmorphism භාවිතා කරන්න. Bottom Navigation එකක් අනිවාර්යයි.
+                6. NO FAKE LOADERS: Splash screens හෝ Loaders භාවිතා නොකරන්න.
                 
                 අතිශය වැදගත් නියෝගය:
                 කිසිදු පැහැදිලි කිරීමක් අවශ්‍ය නැත. සම්පූර්ණ කේතය අනිවාර්යයෙන්ම "<!DOCTYPE html>" යන්නෙන් ආරම්භ වී "</html>" යන්නෙන් අවසන් විය යුතුය."""
@@ -216,6 +222,7 @@ if st.session_state.app_code:
         else:
             headers = {"Authorization": f"token {github_token}", "Accept": "application/vnd.github.v3+json"}
             
+            # APK එක සාදන Workflow එක (Standard Cordova - Fast & Lightweight 2MB)
             wf_url = f"https://api.github.com/repos/{github_repo}/contents/.github/workflows/build.yml"
             wf_check = requests.get(wf_url, headers=headers)
             if wf_check.status_code != 200:
