@@ -1,4 +1,4 @@
-import streamlit as st
+app_code = """import streamlit as st
 import google.generativeai as genai
 import streamlit.components.v1 as components
 import re
@@ -10,7 +10,7 @@ import json
 # --- 1. PAGE CONFIGURATION & PREMIUM UI ---
 st.set_page_config(page_title="Base44 Pro - Cloud AI Factory", page_icon="⚡", layout="wide")
 
-st.markdown("""
+st.markdown('''
     <style>
     .stApp { background-color: #0d1117; color: #c9d1d9; }
     .stButton>button { 
@@ -24,7 +24,7 @@ st.markdown("""
     .stTextArea>div>div>textarea { background-color: #1e242c; color: #58a6ff; font-family: monospace; border-radius: 8px; }
     .mobile-frame { border: 6px solid #30363d; border-radius: 24px; padding: 10px; background: #000; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
     </style>
-""", unsafe_allow_html=True)
+''', unsafe_allow_html=True)
 
 # Session States
 if "app_code" not in st.session_state: st.session_state.app_code = None
@@ -141,12 +141,12 @@ with tab3:
                     for f in res.json():
                         if isinstance(f, dict) and 'name' in f:
                             files_list.append(f['name'])
-                            if f['name'].lower() in ['readme.md', 'app.py', 'index.js']:
+                            if f['name'].lower() in ['readme.md', 'app.py', 'index.js', 'main.py']:
                                 if 'download_url' in f and f['download_url']:
                                     file_res = requests.get(f['download_url'])
                                     if file_res.status_code == 200:
-                                        readme_content += f"\n--- {f['name']} ---\n{file_res.text[:1000]}"
-                    user_context = f"GitHub Repo: {repo_path}. \nFiles: {', '.join(files_list)}. \nProject Snippets: {readme_content}\nCreate a matching app based on this."
+                                        readme_content += f"\\n--- {f['name']} ---\\n{file_res.text[:1500]}"
+                    user_context = f"GitHub Repo: {repo_path}. \\nFiles: {', '.join(files_list)}. \\nProject Snippets: {readme_content}\\nCreate a MATCHING app based EXACTLY on these algorithms."
                     source_info = f"GitHub Scanner ({repo_path})"
                     st.success("🐙 GitHub Repo එකේ අන්තර්ගතය සාර්ථකව කියවන ලදී!")
                 else:
@@ -163,28 +163,23 @@ if st.button("🚀 GENERATE MASTER APP", use_container_width=True):
     else:
         with st.spinner(f"{ai_provider.split(' ')[0]} AI මඟින් Premium කේතය ලියමින් පවතී... (මඳක් රැඳී සිටින්න)"):
             try:
-                master_prompt = f"""You are a World-Class Full-Stack Mobile App Developer & UI/UX Expert.
+                # 🚀 DYNAMIC, CONTEXT-AWARE PREMIUM PROMPT 🚀
+                master_prompt = f\"\"\"You are a World-Class Principal UI/UX Engineer and Full-Stack Mobile App Developer.
 Source: {source_info}. Context: {user_context}.
 
-CRITICAL INSTRUCTION: Generate a highly sophisticated, professional, and complex "Wall Street" / Silicon Valley level premium application. DO NOT output a simple or basic UI.
+CRITICAL MISSION: Build an ultra-premium, visually stunning Single Page Application (SPA) for Mobile based EXACTLY on the user's context/repo. Do NOT default to a trading app unless the context implies it. Adapt your UI/UX to the specific domain (e.g., E-commerce, Social, Utility, Finance).
 
-CRITICAL RULES:
-1. **ULTRA-PREMIUM UI/UX**: Use Tailwind CSS (`<script src="https://cdn.tailwindcss.com"></script>`). Use deep dark themes (`bg-[#0B0F19]`), glassmorphism, beautiful gradients, and FontAwesome icons (`<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">`).
-2. **SPA NAVIGATION (CRITICAL FOR IFRAME)**: 
-   - You MUST create at least 4 distinct screens (e.g., Dashboard, Markets, Portfolio, Profile).
-   - ONLY show the Dashboard initially (`display: block`). Hide others (`display: none`).
-   - The Bottom Navigation MUST switch these screens using JavaScript (e.g., `onclick="switchTab('profile')"`).
-   - ABSOLUTELY NEVER use `<a href="#">` or `<a href="">` for navigation! Clicking standard links will crash our iframe preview. You MUST use `<button>` or `<div onclick="...">` for all internal navigation.
-3. **COMPLEX LAYOUT & CHARTS**: 
-   - A sticky top header with user profile & notifications.
-   - A complex Dashboard with at least 4 metric cards (Balance, Profit/Loss, etc.).
-   - A large Chart area (Use Chart.js `<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>`) filled with realistic 30-day mock data.
-   - A scrollable list of recent transactions or crypto pairs.
-4. **MOCK DATA**: Provide detailed JavaScript arrays for mock data. Fill the app with realistic numbers. Do not use external APIs.
-5. **GITHUB REPO COMPLETENESS**: If a repo is provided, integrate ALL its implied logic into this premium UI.
-6. **NO SHORTCUTS**: Write production-ready code. The HTML must be long, detailed, and completely styled.
+CRITICAL TECHNICAL RULES:
+1. **DOMAIN ADAPTATION**: Analyze the Context/Repo. If it's a Trading app, use TradingView/Chart.js and order books. If it's E-commerce, build beautiful product grids and cart UI. If it's Social, build elegant feeds. Match the UI vibe perfectly to the use-case.
+2. **ULTRA-PREMIUM UI**: Use Tailwind CSS (`<script src="https://cdn.tailwindcss.com"></script>`). Create a breathtaking, modern design (e.g., glassmorphism, beautiful gradients, subtle borders, high-end typography). Use FontAwesome (`<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">`).
+3. **SPA NAVIGATION (CRITICAL FOR IFRAME)**: 
+   - Create at least 4 distinct functional screens/tabs.
+   - Switch them using JavaScript (`display: none` / `block`). 
+   - ABSOLUTELY NEVER use `<a href>` for internal navigation! It crashes the iframe. Use `<button onclick="...">` or `<div onclick="...">`.
+4. **DENSITY & MOCK DATA**: No empty states! Provide highly detailed JavaScript arrays for mock data. Fill the UI with realistic content (images, names, metrics, timestamps).
+5. **GITHUB REPO COMPLETENESS**: If a repo is provided, you MUST integrate ALL its implied logic, algorithms, and features into this UI. Make the UI functional to represent the repo's purpose.
 
-Output ONLY raw HTML code (starting with <!DOCTYPE html> and ending with </html>). NO Markdown, NO explanations."""
+Output ONLY raw HTML code (starting with <!DOCTYPE html> and ending with </html>). NO Markdown, NO explanations.\"\"\"
                 
                 raw_code = ""
                 clean_api_key = str(api_key).strip()
@@ -205,7 +200,7 @@ Output ONLY raw HTML code (starting with <!DOCTYPE html> and ending with </html>
                         "model": selected_model, 
                         "messages": [{"role": "user", "content": master_prompt}], 
                         "max_tokens": 8000,
-                        "temperature": 0.5
+                        "temperature": 0.3
                     }
                     res = requests.post(groq_url, headers=headers, json=payload)
                     if res.status_code == 200:
@@ -225,9 +220,8 @@ Output ONLY raw HTML code (starting with <!DOCTYPE html> and ending with </html>
                     try:
                         supa_headers = {"apikey": supabase_key, "Authorization": f"Bearer {supabase_key}", "Content-Type": "application/json", "Prefer": "return=minimal"}
                         supa_data = {"app_name": custom_app_name, "provider": ai_provider, "model": selected_model, "source_code": final_code}
-                        req = requests.post(f"{safe_supa_url}/rest/v1/generated_apps", headers=supa_headers, json=supa_data)
-                        # Error will be silenced to avoid yellow box interruption.
-                    except Exception as sqle:
+                        requests.post(f"{safe_supa_url}/rest/v1/generated_apps", headers=supa_headers, json=supa_data)
+                    except:
                         pass
                         
                 st.rerun()
@@ -258,7 +252,7 @@ if st.session_state.app_code:
             wf_url = base64.b64decode("aHR0cHM6Ly9hcGkuZ2l0aHViLmNvbS9yZXBvcy8=").decode('utf-8') + f"{github_repo}/contents/.github/workflows/build.yml"
             wf_check = requests.get(wf_url, headers=headers)
             if wf_check.status_code != 200:
-                yaml_content = """name: Build Android APK
+                yaml_content = \"\"\"name: Build Android APK
 on:
   push:
     branches: [ main ]
@@ -289,7 +283,7 @@ jobs:
     - uses: actions/upload-artifact@v4
       with:
         name: premium-app-apk
-        path: myapp/platforms/android/app/build/outputs/apk/debug/app-debug.apk"""
+        path: myapp/platforms/android/app/build/outputs/apk/debug/app-debug.apk\"\"\"
                 requests.put(wf_url, headers=headers, json={"message": "Auto-setup Cloud Build Workflow", "content": base64.b64encode(yaml_content.encode('utf-8')).decode('utf-8')})
             
             file_url = base64.b64decode("aHR0cHM6Ly9hcGkuZ2l0aHViLmNvbS9yZXBvcy8=").decode('utf-8') + f"{github_repo}/contents/index.html"
@@ -341,3 +335,7 @@ jobs:
         st.success("🎯 සාර්ථකයි! ඔබගේ APK ගොනුව සූදානම්.")
         st.balloons()
         st.link_button("📥 DOWNLOAD OFFICIAL APK (ZIP)", st.session_state.apk_url, use_container_width=True)
+"""
+
+with open("app.py", "w", encoding="utf-8") as f:
+    f.write(app_code)
