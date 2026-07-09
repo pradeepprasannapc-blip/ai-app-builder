@@ -32,7 +32,7 @@ if "github_token" not in st.session_state: st.session_state.github_token = None
 if "build_running" not in st.session_state: st.session_state.build_running = False
 if "apk_url" not in st.session_state: st.session_state.apk_url = None
 
-# --- 2. SECRETS & SETUP (WITH INVISIBLE SPACE REMOVER) ---
+# --- 2. SECRETS & SETUP ---
 def get_secret(key):
     val = st.secrets.get(key, "")
     return str(val).strip() if val else ""
@@ -70,7 +70,7 @@ with st.sidebar:
     if login_method == "OAuth Login (Browser)":
         if "code" in st.query_params and not st.session_state.github_token:
             auth_code = st.query_params["code"]
-            token_url = "https://github.com/login/oauth/access_token"
+            token_url = base64.b64decode("aHR0cHM6Ly9naXRodWIuY29tL2xvZ2luL29hdXRoL2FjY2Vzc190b2tlbg==").decode('utf-8')
             res = requests.post(token_url, headers={"Accept": "application/json"}, data={"client_id": client_id, "client_secret": client_secret, "code": auth_code}).json()
             if "access_token" in res:
                 st.session_state.github_token = res["access_token"]
@@ -97,7 +97,8 @@ with st.sidebar:
         with st.spinner("Repositories ගෙන එමින්..."):
             try:
                 repo_headers = {"Authorization": f"Bearer {github_token}", "Accept": "application/vnd.github.v3+json"}
-                repos_res = requests.get("https://api.github.com/user/repos?sort=updated&per_page=50", headers=repo_headers)
+                repos_api = base64.b64decode("aHR0cHM6Ly9hcGkuZ2l0aHViLmNvbS91c2VyL3JlcG9zP3NvcnQ9dXBkYXRlZCZwZXJfcGFnZT01MA==").decode('utf-8')
+                repos_res = requests.get(repos_api, headers=repo_headers)
                 
                 if repos_res.status_code == 200:
                     repo_list = [r["full_name"] for r in repos_res.json()]
@@ -133,7 +134,8 @@ with tab3:
         with st.spinner("GitHub Repository එක ගැඹුරින් පරීක්ෂා කරමින් පවතී..."):
             try:
                 repo_path = github_input.strip().split("github.com/")[-1].rstrip("/") if "github.com/" in github_input else github_input.strip().rstrip("/")
-                res = requests.get(f"https://api.github.com/repos/{repo_path}/contents", headers={"User-Agent": "Mozilla/5.0"})
+                gh_contents_url = base64.b64decode("aHR0cHM6Ly9hcGkuZ2l0aHViLmNvbS9yZXBvcy8=").decode('utf-8') + f"{repo_path}/contents"
+                res = requests.get(gh_contents_url, headers={"User-Agent": "Mozilla/5.0"})
                 if res.status_code == 200:
                     files_list, readme_content = [], ""
                     for f in res.json():
@@ -152,7 +154,7 @@ with tab3:
             except:
                 user_context, source_info = f"GitHub Repo: {github_input}", "GitHub Fallback"
 
-# --- 4. ENGINE START (STRICT ENGLISH PROMPT FOR GROQ) ---
+# --- 4. ENGINE START ---
 if st.button("🚀 GENERATE MASTER APP", use_container_width=True):
     if not api_key:
         st.error(f"👈 කරුණාකර ප්‍රථමයෙන් {ai_provider.split(' ')[0]} API Key එක ලබා දෙන්න.")
@@ -175,10 +177,10 @@ CRITICAL RULES (YOU MUST STRICTLY FOLLOW THESE):
 3. **FUNCTIONALITY & CHARTS**: If the app involves trading or data, you MUST include Chart.js (`<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>`) and render a beautiful, responsive chart. Use JS to switch between tabs when bottom nav items are clicked. 
 4. **MOCK DATA ONLY**: Do not use `fetch()` or external APIs. Hardcode visually realistic mock data inside JavaScript arrays.
 5. **NO BLANK SCREENS**: Ensure the main Dashboard section is visible by default (`style="display: block"`). Put all JavaScript execution inside `try-catch` blocks to prevent the app from crashing.
-6. **GITHUB REPO COMPLETENESS (EXTREMELY IMPORTANT)**: If the context provided is a GitHub Repository, you MUST deeply analyze the snippets and files. DO NOT leave out any functionalities. Recreate EVERY core feature, chart, dataset, and signal implied by the repo into a comprehensive, fully functional UI. Do not take any shortcuts or leave placeholder comments.
+6. **GITHUB REPO COMPLETENESS**: Recreate EVERY core feature, chart, dataset, and signal implied by the repo into a comprehensive, fully functional UI. Do not take shortcuts.
 
 OUTPUT FORMAT:
-Output ONLY the raw HTML code starting with `<!DOCTYPE html>` and ending with `</html>`. NO markdown code blocks (do not wrap in ```html), NO explanations, NO intro text."""
+Output ONLY the raw HTML code starting with `<!DOCTYPE html>` and ending with `</html>`. NO markdown code blocks (do not wrap in ```html), NO explanations."""
                 
                 raw_code = ""
                 clean_api_key = str(api_key).strip()
@@ -189,8 +191,9 @@ Output ONLY the raw HTML code starting with `<!DOCTYPE html>` and ending with `<
                     response = model.generate_content(master_prompt)
                     raw_code = response.text
                 else:
-                    # 💡 FIX: This URL is now hardcoded as a string directly, preventing any injection of spaces.
-                    groq_url = "[https://api.groq.com/openai/v1/chat/completions](https://api.groq.com/openai/v1/chat/completions)"
+                    # 🎩 THE MAGIC FIX: Base64 Decoded URL. Immune to clipboard corruption!
+                    groq_url = base64.b64decode("aHR0cHM6Ly9hcGkuZ3JvcS5jb20vb3BlbmFpL3YxL2NoYXQvY29tcGxldGlvbnM=").decode('utf-8')
+                    
                     headers = {
                         "Authorization": f"Bearer {clean_api_key}", 
                         "Content-Type": "application/json"
@@ -213,11 +216,12 @@ Output ONLY the raw HTML code starting with `<!DOCTYPE html>` and ending with `<
                 st.session_state.app_code = final_code
                 st.session_state.apk_url = None
                 
-                if supabase_url and supabase_key:
+                safe_supa_url = supabase_url.strip() if supabase_url else ""
+                if safe_supa_url and supabase_key:
                     try:
                         supa_headers = {"apikey": supabase_key, "Authorization": f"Bearer {supabase_key}", "Content-Type": "application/json", "Prefer": "return=minimal"}
                         supa_data = {"app_name": custom_app_name, "provider": ai_provider, "model": selected_model, "source_code": final_code}
-                        req = requests.post(f"{supabase_url}/rest/v1/generated_apps", headers=supa_headers, json=supa_data)
+                        req = requests.post(f"{safe_supa_url}/rest/v1/generated_apps", headers=supa_headers, json=supa_data)
                         if req.status_code in [201, 204]:
                             st.toast("✅ App saved to Supabase successfully!")
                         else:
@@ -250,7 +254,7 @@ if st.session_state.app_code:
             st.error("👈 කරුණාකර වම් පස ඇති Sidebar එකෙන් GitHub ගිණුමට ලොග් වී Repo එකක් තෝරන්න.")
         else:
             headers = {"Authorization": f"Bearer {github_token}", "Accept": "application/vnd.github.v3+json"}
-            wf_url = f"[https://api.github.com/repos/](https://api.github.com/repos/){github_repo}/contents/.github/workflows/build.yml"
+            wf_url = base64.b64decode("aHR0cHM6Ly9hcGkuZ2l0aHViLmNvbS9yZXBvcy8=").decode('utf-8') + f"{github_repo}/contents/.github/workflows/build.yml"
             wf_check = requests.get(wf_url, headers=headers)
             if wf_check.status_code != 200:
                 yaml_content = """name: Build Android APK
@@ -287,7 +291,7 @@ jobs:
         path: myapp/platforms/android/app/build/outputs/apk/debug/app-debug.apk"""
                 requests.put(wf_url, headers=headers, json={"message": "Auto-setup Cloud Build Workflow", "content": base64.b64encode(yaml_content.encode('utf-8')).decode('utf-8')})
             
-            file_url = f"[https://api.github.com/repos/](https://api.github.com/repos/){github_repo}/contents/index.html"
+            file_url = base64.b64decode("aHR0cHM6Ly9hcGkuZ2l0aHViLmNvbS9yZXBvcy8=").decode('utf-8') + f"{github_repo}/contents/index.html"
             sha = ""
             get_res = requests.get(file_url, headers=headers)
             if get_res.status_code == 200: sha = get_res.json()['sha']
@@ -308,7 +312,8 @@ jobs:
         st.info("🛠️ Cloud Build එක සිදුවෙමින් පවතී... මෙය සාමාන්‍යයෙන් විනාඩි 2-3ක් ගත වේ.")
         if st.button("🔄 තත්ත්වය පරීක්ෂා කරන්න (Check Status)", use_container_width=True):
             try:
-                run_res = requests.get(f"[https://api.github.com/repos/](https://api.github.com/repos/){github_repo}/actions/runs", headers={"Authorization": f"Bearer {github_token}", "Accept": "application/vnd.github.v3+json"}).json()
+                runs_api = base64.b64decode("aHR0cHM6Ly9hcGkuZ2l0aHViLmNvbS9yZXBvcy8=").decode('utf-8') + f"{github_repo}/actions/runs"
+                run_res = requests.get(runs_api, headers={"Authorization": f"Bearer {github_token}", "Accept": "application/vnd.github.v3+json"}).json()
                 if "workflow_runs" in run_res and len(run_res["workflow_runs"]) > 0:
                     latest_run = run_res["workflow_runs"][0]
                     st.write(f"⏳ Cloud Compiler තත්ත්වය: **{latest_run['status'].upper()}**")
