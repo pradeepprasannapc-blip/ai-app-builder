@@ -161,26 +161,28 @@ if st.button("🚀 GENERATE MASTER APP", use_container_width=True):
     elif not user_context:
         st.warning("⚠️ කරුණාකර තොරතුරු ඇතුළත් කරන්න.")
     else:
-        with st.spinner(f"{ai_provider.split(' ')[0]} AI මඟින් කේතය ලියමින් පවතී... (මඳක් රැඳී සිටින්න)"):
+        with st.spinner(f"{ai_provider.split(' ')[0]} AI මඟින් Premium කේතය ලියමින් පවතී... (මඳක් රැඳී සිටින්න)"):
             try:
-                master_prompt = f"""You are an Expert Full-Stack Mobile App Developer and UI/UX Designer.
+                # 💡 SUPER STRICT PROMPT FOR PREMIUM UI 💡
+                master_prompt = f"""You are a World-Class Full-Stack Mobile App Developer & UI/UX Expert.
 Source: {source_info}. Context: {user_context}.
 
-Task: Create a Fully Functional, visually stunning Single Page Application (SPA) for Mobile.
+CRITICAL INSTRUCTION: The user complained that previous apps looked like "preschool apps". You MUST generate a highly sophisticated, professional, and complex "Wall Street" / Silicon Valley level premium application. DO NOT output a simple or basic UI.
 
-CRITICAL RULES (YOU MUST STRICTLY FOLLOW THESE):
-1. **PREMIUM UI/UX (MANDATORY)**: You MUST include Tailwind CSS via CDN (`<script src="https://cdn.tailwindcss.com"></script>`). The app MUST have a modern dark theme (`bg-gray-900`, `text-white`). Use modern UI elements: Glassmorphism, rounded corners, soft gradients, and FontAwesome icons (`<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">`). DO NOT output a basic, unstyled HTML page.
-2. **APP STRUCTURE**: 
-   - **Top Header**: Fixed at the top, showing the App Name '{custom_app_name}'. Use a nice icon or the provided logo '{custom_logo_url}'.
-   - **Main Content Area**: Scrollable padding area. Create beautiful statistic cards, lists, or grids depending on the context.
-   - **Bottom Navigation**: Fixed at the bottom (`fixed bottom-0 w-full`) with at least 4 clickable icons (e.g., Dashboard, Portfolio, Signals, Settings).
-3. **FUNCTIONALITY & CHARTS**: If the app involves trading or data, you MUST include Chart.js (`<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>`) and render a beautiful, responsive chart. Use JS to switch between tabs when bottom nav items are clicked. 
-4. **MOCK DATA ONLY**: Do not use `fetch()` or external APIs. Hardcode visually realistic mock data inside JavaScript arrays.
-5. **NO BLANK SCREENS**: Ensure the main Dashboard section is visible by default (`style="display: block"`). Put all JavaScript execution inside `try-catch` blocks to prevent the app from crashing.
-6. **GITHUB REPO COMPLETENESS**: Recreate EVERY core feature, chart, dataset, and signal implied by the repo into a comprehensive, fully functional UI. Do not take shortcuts.
+CRITICAL RULES:
+1. **ULTRA-PREMIUM UI/UX**: Use Tailwind CSS (`<script src="https://cdn.tailwindcss.com"></script>`). Use deep dark themes (`bg-[#0B0F19]`), neon accents (`text-emerald-400`, `text-rose-500`), glassmorphism (`bg-white bg-opacity-5 backdrop-blur-md border border-gray-800`), and beautiful gradients. 
+2. **COMPLEX LAYOUT**: 
+   - A sticky top header with user profile & notifications.
+   - A complex Dashboard with at least 4 metric cards (Balance, Profit/Loss, etc.) using CSS Grid.
+   - A large, beautiful Chart area (Use Chart.js `<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>`) filled with realistic mock data (e.g., 30 days of trading data).
+   - A scrollable list of recent transactions, crypto pairs, or signals with rich icons.
+   - A fixed bottom navigation bar with 4-5 interactive tabs (Dashboard, Markets, Portfolio, Profile).
+3. **FUNCTIONALITY**: Write extensive JavaScript to handle tab switching, chart rendering, and realistic mock data updates. It must FEEL like a real app.
+4. **MOCK DATA**: Provide highly detailed JavaScript arrays for mock data. No empty states. Fill the app with realistic numbers.
+5. **GITHUB REPO COMPLETENESS**: If a repo is provided, integrate ALL its implied logic into this premium UI.
+6. **NO SHORTCUTS**: Write production-ready code. The HTML must be long, detailed, and completely styled. Use FontAwesome icons (`<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">`).
 
-OUTPUT FORMAT:
-Output ONLY the raw HTML code starting with `<!DOCTYPE html>` and ending with `</html>`. NO markdown code blocks (do not wrap in ```html), NO explanations."""
+Output ONLY raw HTML code (starting with <!DOCTYPE html> and ending with </html>). NO Markdown, NO explanations."""
                 
                 raw_code = ""
                 clean_api_key = str(api_key).strip()
@@ -191,7 +193,6 @@ Output ONLY the raw HTML code starting with `<!DOCTYPE html>` and ending with `<
                     response = model.generate_content(master_prompt)
                     raw_code = response.text
                 else:
-                    # 🎩 THE MAGIC FIX: Base64 Decoded URL. Immune to clipboard corruption!
                     groq_url = base64.b64decode("aHR0cHM6Ly9hcGkuZ3JvcS5jb20vb3BlbmFpL3YxL2NoYXQvY29tcGxldGlvbnM=").decode('utf-8')
                     
                     headers = {
@@ -201,7 +202,8 @@ Output ONLY the raw HTML code starting with `<!DOCTYPE html>` and ending with `<
                     payload = {
                         "model": selected_model, 
                         "messages": [{"role": "user", "content": master_prompt}], 
-                        "max_tokens": 8000
+                        "max_tokens": 8000,
+                        "temperature": 0.5
                     }
                     res = requests.post(groq_url, headers=headers, json=payload)
                     if res.status_code == 200:
@@ -322,7 +324,7 @@ jobs:
                         if latest_run['conclusion'] == "success":
                             art_res = requests.get(latest_run["artifacts_url"], headers={"Authorization": f"Bearer {github_token}", "Accept": "application/vnd.github.v3+json"}).json()
                             if art_res.get("artifacts"):
-                                st.session_state.apk_url = f"[https://github.com/](https://github.com/){github_repo}/actions/runs/{latest_run['id']}/artifacts/{art_res['artifacts'][0]['id']}"
+                                st.session_state.apk_url = f"https://github.com/{github_repo}/actions/runs/{latest_run['id']}/artifacts/{art_res['artifacts'][0]['id']}"
                             else:
                                 st.error("⚠️ APK ෆයිල් එක සොයාගත නොහැක.")
                         else:
