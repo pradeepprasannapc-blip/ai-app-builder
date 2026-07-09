@@ -163,7 +163,6 @@ if st.button("🚀 GENERATE MASTER APP", use_container_width=True):
                 genai.configure(api_key=gemini_key)
                 model = genai.GenerativeModel(selected_model, generation_config={"max_output_tokens": 8192})
                 
-                # 💡 FIX: Anti-Blank Screen Niyoga (Fail-Safe)
                 master_prompt = f"""ඔබ ලෝකයේ සිටින දක්ෂතම Full-Stack Mobile App Developer සහ UI/UX Designer කෙනෙකි.
                 මූලාශ්‍රය: {source_info}. විස්තරය: {user_context}. 
                 
@@ -182,20 +181,24 @@ if st.button("🚀 GENERATE MASTER APP", use_container_width=True):
                 response = model.generate_content(master_prompt)
                 raw_code = response.text
                 
+                # 💡 අලුත් ආරක්ෂිත දැල: කේතය සම්පූර්ණ නැත්නම් Error එකක් පෙන්වීම
                 html_match = re.search(r'(<!DOCTYPE\s+html>.*?</html>)', raw_code, re.IGNORECASE | re.DOTALL)
                 
                 if html_match:
                     final_code = html_match.group(1).strip()
+                    st.session_state.app_code = final_code
+                    st.session_state.apk_url = None
+                    st.rerun()
                 else:
                     html_match_fallback = re.search(r'(<html.*?>.*?</html>)', raw_code, re.IGNORECASE | re.DOTALL)
                     if html_match_fallback:
                         final_code = html_match_fallback.group(1).strip()
+                        st.session_state.app_code = final_code
+                        st.session_state.apk_url = None
+                        st.rerun()
                     else:
-                        final_code = raw_code.replace("```html", "").replace("```", "").strip()
-                    
-                st.session_state.app_code = final_code
-                st.session_state.apk_url = None
-                st.rerun()
+                        st.error("⚠️ AI එක කේතය සම්පූර්ණයෙන්ම ලබා දුන්නේ නැත (දිග වැඩි වූ නිසා විය හැක). කරුණාකර නැවත 'GENERATE MASTER APP' බොත්තම ඔබන්න.")
+                        
             except Exception as e:
                 st.error(f"❌ දෝෂයක්: {e}")
 
