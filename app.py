@@ -1,4 +1,4 @@
-app_code = """import streamlit as st
+import streamlit as st
 import google.generativeai as genai
 import streamlit.components.v1 as components
 import re
@@ -10,7 +10,7 @@ import json
 # --- 1. PAGE CONFIGURATION & PREMIUM UI ---
 st.set_page_config(page_title="Base44 Pro - Cloud AI Factory", page_icon="⚡", layout="wide")
 
-st.markdown('''
+st.markdown("""
     <style>
     .stApp { background-color: #0d1117; color: #c9d1d9; }
     .stButton>button { 
@@ -24,7 +24,7 @@ st.markdown('''
     .stTextArea>div>div>textarea { background-color: #1e242c; color: #58a6ff; font-family: monospace; border-radius: 8px; }
     .mobile-frame { border: 6px solid #30363d; border-radius: 24px; padding: 10px; background: #000; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
     </style>
-''', unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
 # Session States
 if "app_code" not in st.session_state: st.session_state.app_code = None
@@ -32,12 +32,16 @@ if "github_token" not in st.session_state: st.session_state.github_token = None
 if "build_running" not in st.session_state: st.session_state.build_running = False
 if "apk_url" not in st.session_state: st.session_state.apk_url = None
 
-# --- 2. SECRETS & SETUP ---
-client_id = st.secrets.get("GITHUB_CLIENT_ID", "").strip()
-client_secret = st.secrets.get("GITHUB_CLIENT_SECRET", "").strip()
-supabase_url = st.secrets.get("SUPABASE_URL", "").strip()
-supabase_key = st.secrets.get("SUPABASE_KEY", "").strip()
-groq_default_key = st.secrets.get("GROQ_API_KEY", "").strip()
+# --- 2. SECRETS & SETUP (WITH INVISIBLE SPACE REMOVER) ---
+def get_secret(key):
+    val = st.secrets.get(key, "")
+    return str(val).strip() if val else ""
+
+client_id = get_secret("GITHUB_CLIENT_ID")
+client_secret = get_secret("GITHUB_CLIENT_SECRET")
+supabase_url = get_secret("SUPABASE_URL")
+supabase_key = get_secret("SUPABASE_KEY")
+groq_default_key = get_secret("GROQ_API_KEY")
 
 with st.sidebar:
     st.title("⚙️ Control Panel")
@@ -47,7 +51,7 @@ with st.sidebar:
     ai_provider = st.selectbox("Select AI Provider:", ["Google Gemini (Default)", "Groq (High Speed/Free)"], index=1)
     
     if ai_provider == "Google Gemini (Default)":
-        api_key = st.text_input("Gemini API Key", type="password", value=st.secrets.get("GEMINI_KEY", "").strip())
+        api_key = st.text_input("Gemini API Key", type="password", value=get_secret("GEMINI_KEY"))
         selected_model = st.selectbox("Select Model:", ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-2.5-flash"], index=0)
     else:
         api_key = st.text_input("Groq API Key", type="password", value=groq_default_key)
@@ -66,7 +70,7 @@ with st.sidebar:
     if login_method == "OAuth Login (Browser)":
         if "code" in st.query_params and not st.session_state.github_token:
             auth_code = st.query_params["code"]
-            token_url = "https://github.com/login/oauth/access_token".strip()
+            token_url = "https://github.com/login/oauth/access_token"
             res = requests.post(token_url, headers={"Accept": "application/json"}, data={"client_id": client_id, "client_secret": client_secret, "code": auth_code}).json()
             if "access_token" in res:
                 st.session_state.github_token = res["access_token"]
@@ -89,16 +93,24 @@ with st.sidebar:
             st.session_state.apk_url = None
             st.rerun()
             
-        github_token = st.session_state.github_token
+        github_token = st.session_state.github_token.strip()
         with st.spinner("Repositories ගෙන එමින්..."):
             try:
-                repos_res = requests.get("https://api.github.com/user/repos?sort=updated&per_page=50", headers={"Authorization": f"token {github_token}", "Accept": "application/vnd.github.v3+json"})
+                repo_headers = {"Authorization": f"Bearer {github_token}", "Accept": "application/vnd.github.v3+json"}
+                repos_res = requests.get("https://api.github.com/user/repos?sort=updated&per_page=50", headers=repo_headers)
+                
                 if repos_res.status_code == 200:
                     repo_list = [r["full_name"] for r in repos_res.json()]
-                    github_repo = st.selectbox("📌 Select your Repository", repo_list) if repo_list else st.warning("Repos සොයාගත නොහැක.")
+                    if repo_list:
+                        github_repo = st.selectbox("📌 Select your Repository", repo_list)
+                    else:
+                        st.warning("ඔබගේ ගිණුමේ Repositories කිසිවක් සොයාගත නොහැක.")
+                        github_repo = st.text_input("GitHub Repository Name", placeholder="username/repo-name")
                 else:
+                    st.error(f"GitHub API Error: {repos_res.status_code}")
                     github_repo = st.text_input("GitHub Repository Name", placeholder="username/repo-name")
-            except:
+            except Exception as e:
+                st.error(f"Network Error: {e}")
                 github_repo = st.text_input("GitHub Repository Name", placeholder="username/repo-name")
     else:
         st.selectbox("GitHub Repository", ["කරුණාකර පළමුව ලොග් වන්න"], disabled=True)
@@ -131,8 +143,8 @@ with tab3:
                                 if 'download_url' in f and f['download_url']:
                                     file_res = requests.get(f['download_url'])
                                     if file_res.status_code == 200:
-                                        readme_content += f"\\n--- {f['name']} ---\\n{file_res.text[:1000]}"
-                    user_context = f"GitHub Repo: {repo_path}. \\nFiles: {', '.join(files_list)}. \\nProject Snippets: {readme_content}\\nCreate a matching app based on this."
+                                        readme_content += f"\n--- {f['name']} ---\n{file_res.text[:1000]}"
+                    user_context = f"GitHub Repo: {repo_path}. \nFiles: {', '.join(files_list)}. \nProject Snippets: {readme_content}\nCreate a matching app based on this."
                     source_info = f"GitHub Scanner ({repo_path})"
                     st.success("🐙 GitHub Repo එකේ අන්තර්ගතය සාර්ථකව කියවන ලදී!")
                 else:
@@ -149,7 +161,7 @@ if st.button("🚀 GENERATE MASTER APP", use_container_width=True):
     else:
         with st.spinner(f"{ai_provider.split(' ')[0]} AI මඟින් කේතය ලියමින් පවතී... (මඳක් රැඳී සිටින්න)"):
             try:
-                master_prompt = f\"\"\"You are an Expert Full-Stack Mobile App Developer and UI/UX Designer.
+                master_prompt = f"""You are an Expert Full-Stack Mobile App Developer and UI/UX Designer.
 Source: {source_info}. Context: {user_context}.
 
 Task: Create a Fully Functional, visually stunning Single Page Application (SPA) for Mobile.
@@ -166,19 +178,21 @@ CRITICAL RULES (YOU MUST STRICTLY FOLLOW THESE):
 6. **GITHUB REPO COMPLETENESS (EXTREMELY IMPORTANT)**: If the context provided is a GitHub Repository, you MUST deeply analyze the snippets and files. DO NOT leave out any functionalities. Recreate EVERY core feature, chart, dataset, and signal implied by the repo into a comprehensive, fully functional UI. Do not take any shortcuts or leave placeholder comments.
 
 OUTPUT FORMAT:
-Output ONLY the raw HTML code starting with `<!DOCTYPE html>` and ending with `</html>`. NO markdown code blocks (do not wrap in ```html), NO explanations, NO intro text.\"\"\"
+Output ONLY the raw HTML code starting with `<!DOCTYPE html>` and ending with `</html>`. NO markdown code blocks (do not wrap in ```html), NO explanations, NO intro text."""
                 
                 raw_code = ""
+                clean_api_key = str(api_key).strip()
                 
                 if ai_provider == "Google Gemini (Default)":
-                    genai.configure(api_key=api_key.strip())
+                    genai.configure(api_key=clean_api_key)
                     model = genai.GenerativeModel(selected_model, generation_config={"max_output_tokens": 8192})
                     response = model.generate_content(master_prompt)
                     raw_code = response.text
                 else:
-                    groq_url = "[https://api.groq.com/openai/v1/chat/completions](https://api.groq.com/openai/v1/chat/completions)".strip()
+                    # 💡 FIX: This URL is now hardcoded as a string directly, preventing any injection of spaces.
+                    groq_url = "[https://api.groq.com/openai/v1/chat/completions](https://api.groq.com/openai/v1/chat/completions)"
                     headers = {
-                        "Authorization": f"Bearer {api_key.strip()}", 
+                        "Authorization": f"Bearer {clean_api_key}", 
                         "Content-Type": "application/json"
                     }
                     payload = {
@@ -199,12 +213,11 @@ Output ONLY the raw HTML code starting with `<!DOCTYPE html>` and ending with `<
                 st.session_state.app_code = final_code
                 st.session_state.apk_url = None
                 
-                safe_supa_url = supabase_url.strip() if supabase_url else ""
-                if safe_supa_url and supabase_key:
+                if supabase_url and supabase_key:
                     try:
                         supa_headers = {"apikey": supabase_key, "Authorization": f"Bearer {supabase_key}", "Content-Type": "application/json", "Prefer": "return=minimal"}
                         supa_data = {"app_name": custom_app_name, "provider": ai_provider, "model": selected_model, "source_code": final_code}
-                        req = requests.post(f"{safe_supa_url}/rest/v1/generated_apps", headers=supa_headers, json=supa_data)
+                        req = requests.post(f"{supabase_url}/rest/v1/generated_apps", headers=supa_headers, json=supa_data)
                         if req.status_code in [201, 204]:
                             st.toast("✅ App saved to Supabase successfully!")
                         else:
@@ -236,11 +249,11 @@ if st.session_state.app_code:
         if not github_token or not github_repo:
             st.error("👈 කරුණාකර වම් පස ඇති Sidebar එකෙන් GitHub ගිණුමට ලොග් වී Repo එකක් තෝරන්න.")
         else:
-            headers = {"Authorization": f"token {github_token}", "Accept": "application/vnd.github.v3+json"}
-            wf_url = f"[https://api.github.com/repos/](https://api.github.com/repos/){github_repo}/contents/.github/workflows/build.yml".strip()
+            headers = {"Authorization": f"Bearer {github_token}", "Accept": "application/vnd.github.v3+json"}
+            wf_url = f"[https://api.github.com/repos/](https://api.github.com/repos/){github_repo}/contents/.github/workflows/build.yml"
             wf_check = requests.get(wf_url, headers=headers)
             if wf_check.status_code != 200:
-                yaml_content = \"\"\"name: Build Android APK
+                yaml_content = """name: Build Android APK
 on:
   push:
     branches: [ main ]
@@ -271,10 +284,10 @@ jobs:
     - uses: actions/upload-artifact@v4
       with:
         name: premium-app-apk
-        path: myapp/platforms/android/app/build/outputs/apk/debug/app-debug.apk\"\"\"
+        path: myapp/platforms/android/app/build/outputs/apk/debug/app-debug.apk"""
                 requests.put(wf_url, headers=headers, json={"message": "Auto-setup Cloud Build Workflow", "content": base64.b64encode(yaml_content.encode('utf-8')).decode('utf-8')})
             
-            file_url = f"[https://api.github.com/repos/](https://api.github.com/repos/){github_repo}/contents/index.html".strip()
+            file_url = f"[https://api.github.com/repos/](https://api.github.com/repos/){github_repo}/contents/index.html"
             sha = ""
             get_res = requests.get(file_url, headers=headers)
             if get_res.status_code == 200: sha = get_res.json()['sha']
@@ -295,14 +308,14 @@ jobs:
         st.info("🛠️ Cloud Build එක සිදුවෙමින් පවතී... මෙය සාමාන්‍යයෙන් විනාඩි 2-3ක් ගත වේ.")
         if st.button("🔄 තත්ත්වය පරීක්ෂා කරන්න (Check Status)", use_container_width=True):
             try:
-                run_res = requests.get(f"[https://api.github.com/repos/](https://api.github.com/repos/){github_repo}/actions/runs".strip(), headers={"Authorization": f"token {github_token}", "Accept": "application/vnd.github.v3+json"}).json()
+                run_res = requests.get(f"[https://api.github.com/repos/](https://api.github.com/repos/){github_repo}/actions/runs", headers={"Authorization": f"Bearer {github_token}", "Accept": "application/vnd.github.v3+json"}).json()
                 if "workflow_runs" in run_res and len(run_res["workflow_runs"]) > 0:
                     latest_run = run_res["workflow_runs"][0]
                     st.write(f"⏳ Cloud Compiler තත්ත්වය: **{latest_run['status'].upper()}**")
                     if latest_run['status'] == "completed":
                         st.session_state.build_running = False
                         if latest_run['conclusion'] == "success":
-                            art_res = requests.get(latest_run["artifacts_url"], headers={"Authorization": f"token {github_token}", "Accept": "application/vnd.github.v3+json"}).json()
+                            art_res = requests.get(latest_run["artifacts_url"], headers={"Authorization": f"Bearer {github_token}", "Accept": "application/vnd.github.v3+json"}).json()
                             if art_res.get("artifacts"):
                                 st.session_state.apk_url = f"[https://github.com/](https://github.com/){github_repo}/actions/runs/{latest_run['id']}/artifacts/{art_res['artifacts'][0]['id']}"
                             else:
@@ -322,7 +335,3 @@ jobs:
         st.success("🎯 සාර්ථකයි! ඔබගේ APK ගොනුව සූදානම්.")
         st.balloons()
         st.link_button("📥 DOWNLOAD OFFICIAL APK (ZIP)", st.session_state.apk_url, use_container_width=True)
-"""
-
-with open("app.py", "w", encoding="utf-8") as f:
-    f.write(app_code)
