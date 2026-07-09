@@ -37,6 +37,8 @@ client_id = st.secrets.get("GITHUB_CLIENT_ID", "")
 client_secret = st.secrets.get("GITHUB_CLIENT_SECRET", "")
 supabase_url = st.secrets.get("SUPABASE_URL", "")
 supabase_key = st.secrets.get("SUPABASE_KEY", "")
+# 💡 අලුත්: Groq Key එකත් Secrets වලින් ගන්නවා
+groq_default_key = st.secrets.get("GROQ_API_KEY", "")
 
 with st.sidebar:
     st.title("⚙️ Control Panel")
@@ -49,8 +51,9 @@ with st.sidebar:
         api_key = st.text_input("Gemini API Key", type="password", value=st.secrets.get("GEMINI_KEY", ""))
         selected_model = st.selectbox("Select Model:", ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-2.5-flash"], index=0)
     else:
-        api_key = st.text_input("Groq API Key", type="password")
-        selected_model = st.selectbox("Select Model:", ["llama3-70b-8192", "llama3-8b-8192", "mixtral-8x7b-32768"], index=0)
+        # 💡 FIX: Groq තේරූ වහාම API Key එකයි හොඳම Model එකයි Auto-set වෙනවා
+        api_key = st.text_input("Groq API Key", type="password", value=groq_default_key)
+        selected_model = st.selectbox("Select Model:", ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"], index=0)
     
     st.markdown("---")
     st.subheader("🎨 App Customization")
@@ -139,7 +142,7 @@ with tab3:
             except:
                 user_context, source_info = f"GitHub Repo: {github_input}", "GitHub Fallback"
 
-# --- 4. ENGINE START (MULTI-AI & SUPABASE SECRETS INTEGRATION) ---
+# --- 4. ENGINE START ---
 if st.button("🚀 GENERATE MASTER APP", use_container_width=True):
     if not api_key:
         st.error(f"👈 කරුණාකර ප්‍රථමයෙන් {ai_provider.split(' ')[0]} API Key එක ලබා දෙන්න.")
@@ -163,14 +166,12 @@ if st.button("🚀 GENERATE MASTER APP", use_container_width=True):
                 
                 raw_code = ""
                 
-                # --- AI Provider Logic ---
                 if ai_provider == "Google Gemini (Default)":
                     genai.configure(api_key=api_key)
                     model = genai.GenerativeModel(selected_model, generation_config={"max_output_tokens": 8192})
                     response = model.generate_content(master_prompt)
                     raw_code = response.text
                 else:
-                    # Groq API Integration
                     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
                     payload = {"model": selected_model, "messages": [{"role": "user", "content": master_prompt}], "max_tokens": 8000}
                     res = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=payload)
@@ -178,25 +179,23 @@ if st.button("🚀 GENERATE MASTER APP", use_container_width=True):
                         raw_code = res.json()["choices"][0]["message"]["content"]
                     else:
                         st.error(f"Groq API Error: {res.text}")
+                        st.stop()
                 
-                # --- Bulletproof Extractor ---
                 html_match = re.search(r'(<!DOCTYPE\s+html>.*?</html>)', raw_code, re.IGNORECASE | re.DOTALL)
                 final_code = html_match.group(1).strip() if html_match else re.search(r'(<html.*?>.*?</html>)', raw_code, re.IGNORECASE | re.DOTALL).group(1).strip() if re.search(r'(<html.*?>.*?</html>)', raw_code, re.IGNORECASE | re.DOTALL) else raw_code.replace("```html", "").replace("```", "").strip()
                 
                 st.session_state.app_code = final_code
                 st.session_state.apk_url = None
                 
-                # --- Save to Supabase (Using Secrets) ---
                 if supabase_url and supabase_key:
                     try:
                         supa_headers = {"apikey": supabase_key, "Authorization": f"Bearer {supabase_key}", "Content-Type": "application/json", "Prefer": "return=minimal"}
                         supa_data = {"app_name": custom_app_name, "provider": ai_provider, "model": selected_model, "source_code": final_code}
-                        # 'generated_apps' නමින් table එකක් Supabase හි තිබිය යුතුය
                         req = requests.post(f"{supabase_url}/rest/v1/generated_apps", headers=supa_headers, json=supa_data)
                         if req.status_code in [201, 204]:
                             st.toast("✅ App saved to Supabase successfully!")
                         else:
-                            st.warning(f"Supabase Save Failed (Check Table 'generated_apps'): {req.text}")
+                            st.warning(f"Supabase Save Failed: {req.text}")
                     except Exception as sqle:
                         st.error(f"Supabase Connection Error: {sqle}")
                         
