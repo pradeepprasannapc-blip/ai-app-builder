@@ -33,11 +33,11 @@ if "build_running" not in st.session_state: st.session_state.build_running = Fal
 if "apk_url" not in st.session_state: st.session_state.apk_url = None
 
 # --- 2. SECRETS & SETUP ---
-client_id = st.secrets.get("GITHUB_CLIENT_ID", "")
-client_secret = st.secrets.get("GITHUB_CLIENT_SECRET", "")
-supabase_url = st.secrets.get("SUPABASE_URL", "")
-supabase_key = st.secrets.get("SUPABASE_KEY", "")
-groq_default_key = st.secrets.get("GROQ_API_KEY", "")
+client_id = st.secrets.get("GITHUB_CLIENT_ID", "").strip()
+client_secret = st.secrets.get("GITHUB_CLIENT_SECRET", "").strip()
+supabase_url = st.secrets.get("SUPABASE_URL", "").strip()
+supabase_key = st.secrets.get("SUPABASE_KEY", "").strip()
+groq_default_key = st.secrets.get("GROQ_API_KEY", "").strip()
 
 with st.sidebar:
     st.title("⚙️ Control Panel")
@@ -47,7 +47,7 @@ with st.sidebar:
     ai_provider = st.selectbox("Select AI Provider:", ["Google Gemini (Default)", "Groq (High Speed/Free)"], index=1)
     
     if ai_provider == "Google Gemini (Default)":
-        api_key = st.text_input("Gemini API Key", type="password", value=st.secrets.get("GEMINI_KEY", ""))
+        api_key = st.text_input("Gemini API Key", type="password", value=st.secrets.get("GEMINI_KEY", "").strip())
         selected_model = st.selectbox("Select Model:", ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-2.5-flash"], index=0)
     else:
         api_key = st.text_input("Groq API Key", type="password", value=groq_default_key)
@@ -66,7 +66,7 @@ with st.sidebar:
     if login_method == "OAuth Login (Browser)":
         if "code" in st.query_params and not st.session_state.github_token:
             auth_code = st.query_params["code"]
-            token_url = "https://github.com/login/oauth/access_token"
+            token_url = "https://github.com/login/oauth/access_token".strip()
             res = requests.post(token_url, headers={"Accept": "application/json"}, data={"client_id": client_id, "client_secret": client_secret, "code": auth_code}).json()
             if "access_token" in res:
                 st.session_state.github_token = res["access_token"]
@@ -163,7 +163,7 @@ CRITICAL RULES (YOU MUST STRICTLY FOLLOW THESE):
 3. **FUNCTIONALITY & CHARTS**: If the app involves trading or data, you MUST include Chart.js (`<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>`) and render a beautiful, responsive chart. Use JS to switch between tabs when bottom nav items are clicked. 
 4. **MOCK DATA ONLY**: Do not use `fetch()` or external APIs. Hardcode visually realistic mock data inside JavaScript arrays.
 5. **NO BLANK SCREENS**: Ensure the main Dashboard section is visible by default (`style="display: block"`). Put all JavaScript execution inside `try-catch` blocks to prevent the app from crashing.
-6. **GITHUB REPO COMPLETENESS**: If the context provided is a GitHub Repository, you MUST deeply analyze the snippets and files. DO NOT leave out any functionalities. Recreate EVERY core feature, chart, and signal implied by the repo into a comprehensive, fully functional UI. Do not take shortcuts.
+6. **GITHUB REPO COMPLETENESS (EXTREMELY IMPORTANT)**: If the context provided is a GitHub Repository, you MUST deeply analyze the snippets and files. DO NOT leave out any functionalities. Recreate EVERY core feature, chart, dataset, and signal implied by the repo into a comprehensive, fully functional UI. Do not take any shortcuts or leave placeholder comments.
 
 OUTPUT FORMAT:
 Output ONLY the raw HTML code starting with `<!DOCTYPE html>` and ending with `</html>`. NO markdown code blocks (do not wrap in ```html), NO explanations, NO intro text."""
@@ -171,14 +171,23 @@ Output ONLY the raw HTML code starting with `<!DOCTYPE html>` and ending with `<
                 raw_code = ""
                 
                 if ai_provider == "Google Gemini (Default)":
-                    genai.configure(api_key=api_key)
+                    genai.configure(api_key=api_key.strip())
                     model = genai.GenerativeModel(selected_model, generation_config={"max_output_tokens": 8192})
                     response = model.generate_content(master_prompt)
                     raw_code = response.text
                 else:
-                    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-                    payload = {"model": selected_model, "messages": [{"role": "user", "content": master_prompt}], "max_tokens": 8000}
-                    res = requests.post("[https://api.groq.com/openai/v1/chat/completions](https://api.groq.com/openai/v1/chat/completions)", headers=headers, json=payload)
+                    # 💡 FIX: Removing any invisible spaces from URL and API Key
+                    groq_url = "[https://api.groq.com/openai/v1/chat/completions](https://api.groq.com/openai/v1/chat/completions)".strip()
+                    headers = {
+                        "Authorization": f"Bearer {api_key.strip()}", 
+                        "Content-Type": "application/json"
+                    }
+                    payload = {
+                        "model": selected_model, 
+                        "messages": [{"role": "user", "content": master_prompt}], 
+                        "max_tokens": 8000
+                    }
+                    res = requests.post(groq_url, headers=headers, json=payload)
                     if res.status_code == 200:
                         raw_code = res.json()["choices"][0]["message"]["content"]
                     else:
@@ -191,11 +200,12 @@ Output ONLY the raw HTML code starting with `<!DOCTYPE html>` and ending with `<
                 st.session_state.app_code = final_code
                 st.session_state.apk_url = None
                 
-                if supabase_url and supabase_key:
+                safe_supa_url = supabase_url.strip() if supabase_url else ""
+                if safe_supa_url and supabase_key:
                     try:
                         supa_headers = {"apikey": supabase_key, "Authorization": f"Bearer {supabase_key}", "Content-Type": "application/json", "Prefer": "return=minimal"}
                         supa_data = {"app_name": custom_app_name, "provider": ai_provider, "model": selected_model, "source_code": final_code}
-                        req = requests.post(f"{supabase_url}/rest/v1/generated_apps", headers=supa_headers, json=supa_data)
+                        req = requests.post(f"{safe_supa_url}/rest/v1/generated_apps", headers=supa_headers, json=supa_data)
                         if req.status_code in [201, 204]:
                             st.toast("✅ App saved to Supabase successfully!")
                         else:
@@ -228,13 +238,13 @@ if st.session_state.app_code:
             st.error("👈 කරුණාකර වම් පස ඇති Sidebar එකෙන් GitHub ගිණුමට ලොග් වී Repo එකක් තෝරන්න.")
         else:
             headers = {"Authorization": f"token {github_token}", "Accept": "application/vnd.github.v3+json"}
-            wf_url = f"[https://api.github.com/repos/](https://api.github.com/repos/){github_repo}/contents/.github/workflows/build.yml"
+            wf_url = f"[https://api.github.com/repos/](https://api.github.com/repos/){github_repo}/contents/.github/workflows/build.yml".strip()
             wf_check = requests.get(wf_url, headers=headers)
             if wf_check.status_code != 200:
                 yaml_content = """name: Build Android APK\non:\n  push:\n    branches: [ main ]\n  workflow_dispatch:\njobs:\n  build:\n    runs-on: ubuntu-latest\n    steps:\n    - uses: actions/checkout@v3\n    - uses: actions/setup-node@v3\n      with:\n        node-version: 18\n    - run: npm install -g cordova\n    - run: |\n        cordova create myapp com.premium.aifactory AI_App\n        cd myapp\n        cordova platform add android\n        rm www/index.html\n        cp ../index.html www/index.html\n    - uses: actions/setup-java@v3\n      with:\n        distribution: 'zulu'\n        java-version: '17'\n    - uses: android-actions/setup-android@v3\n    - run: |\n        cd myapp\n        cordova build android --no-telemetry\n    - uses: actions/upload-artifact@v4\n      with:\n        name: premium-app-apk\n        path: myapp/platforms/android/app/build/outputs/apk/debug/app-debug.apk"""
                 requests.put(wf_url, headers=headers, json={"message": "Auto-setup Cloud Build Workflow", "content": base64.b64encode(yaml_content.encode('utf-8')).decode('utf-8')})
             
-            file_url = f"[https://api.github.com/repos/](https://api.github.com/repos/){github_repo}/contents/index.html"
+            file_url = f"[https://api.github.com/repos/](https://api.github.com/repos/){github_repo}/contents/index.html".strip()
             sha = ""
             get_res = requests.get(file_url, headers=headers)
             if get_res.status_code == 200: sha = get_res.json()['sha']
@@ -255,7 +265,7 @@ if st.session_state.app_code:
         st.info("🛠️ Cloud Build එක සිදුවෙමින් පවතී... මෙය සාමාන්‍යයෙන් විනාඩි 2-3ක් ගත වේ.")
         if st.button("🔄 තත්ත්වය පරීක්ෂා කරන්න (Check Status)", use_container_width=True):
             try:
-                run_res = requests.get(f"[https://api.github.com/repos/](https://api.github.com/repos/){github_repo}/actions/runs", headers={"Authorization": f"token {github_token}", "Accept": "application/vnd.github.v3+json"}).json()
+                run_res = requests.get(f"[https://api.github.com/repos/](https://api.github.com/repos/){github_repo}/actions/runs".strip(), headers={"Authorization": f"token {github_token}", "Accept": "application/vnd.github.v3+json"}).json()
                 if "workflow_runs" in run_res and len(run_res["workflow_runs"]) > 0:
                     latest_run = run_res["workflow_runs"][0]
                     st.write(f"⏳ Cloud Compiler තත්ත්වය: **{latest_run['status'].upper()}**")
