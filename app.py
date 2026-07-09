@@ -146,7 +146,7 @@ with tab3:
                 user_context = f"GitHub Repo: {github_input}"
                 source_info = "GitHub Fallback"
 
-# --- 4. ENGINE START (ULTIMATE BULLETPROOF EXTRACTOR) ---
+# --- 4. ENGINE START (ULTIMATE PROMPT & EXTRACTOR) ---
 if st.button("🚀 GENERATE MASTER APP", use_container_width=True):
     if not gemini_key:
         st.error("👈 කරුණාකර ප්‍රථමයෙන් Gemini API Key එක ලබා දෙන්න.")
@@ -161,32 +161,26 @@ if st.button("🚀 GENERATE MASTER APP", use_container_width=True):
                 master_prompt = f"""ඔබ ලෝකයේ සිටින දක්ෂතම Full-Stack Mobile App Developer සහ UI/UX Designer කෙනෙකි.
                 මූලාශ්‍රය: {source_info}. විස්තරය සහ කේතය: {user_context}. 
                 
-                ඔබගේ කාර්යය වන්නේ ඉහත Project එකට අදාළව, ජංගම දුරකථන සඳහා සම්පූර්ණයෙන්ම ක්‍රියාත්මක වන (Fully Functional) Single Page Application (SPA) එකක් නිර්මාණය කිරීමයි.
+                ඔබගේ කාර්යය වන්නේ ජංගම දුරකථන සඳහා සම්පූර්ණයෙන්ම ක්‍රියාත්මක වන (Fully Functional) Single Page Application (SPA) එකක් නිර්මාණය කිරීමයි.
                 
-                අනිවාර්ය අවශ්‍යතා:
-                1. Premium UI: Tailwind CSS භාවිතයෙන් අතිශය නවීන, ආකර්ෂණීය Dark Mode UI එකක් සාදන්න. Glassmorphism, Box Shadows සහ Smooth CSS animations භාවිතා කරන්න.
-                2. Real Functionality: කේතයේ ඇති බොත්තම්, Side menus, සහ Bottom Navigation අනිවාර්යයෙන්ම වැඩ කළ යුතුය. JavaScript භාවිතයෙන් පිටු අතර (Sections) මාරු වීම සකසන්න (Hide/Show divs).
-                3. Business Logic: යෙදුමේ ප්‍රධාන කාර්යයන් සඳහා අවශ්‍ය JavaScript Logic අනිවාර්යයෙන්ම ලියන්න.
-                4. Data Storage: LocalStorage භාවිතා කර දත්ත Save සහ Load වීමට සකසන්න. 
-                5. Font & Icons: Google Fonts (Poppins) සහ FontAwesome icons භාවිතා කරන්න.
-                6. NO LOADING SCREENS: කිසිම ආකාරයක Splash screens, loading animations හෝ fake loaders භාවිතා නොකරන්න. කේතය ක්‍රියාත්මක වූ වහාම පරිශීලකයාට කෙලින්ම Main Dashboard එක හෝ ප්‍රධාන අතුරුමුහුණත (Main UI) දිස්විය යුතුය.
+                අනිවාර්ය නීති (Strict Rules - MUST FOLLOW):
+                1. MOCK DATA ONLY: කිසිම ආකාරයකින් External APIs (උදා: Fetch/Axios) භාවිතා නොකරන්න. App එක ක්‍රියාත්මක වීමට අවශ්‍ය සියලුම දත්ත (Data) JavaScript ඇතුළතම Arrays හෝ Objects ලෙස ලබා දෙන්න. API fail වී App එක Blank වීම මින් වැළකේ.
+                2. NO HIDDEN UI & NO LOADERS: App එක load වූ වහාම 100% ක් පෙනිය යුතුය. කිසිම විටෙක ප්‍රධාන container එක `hidden` හෝ `display: none` නොකරන්න. Splash screens භාවිතා නොකරන්න.
+                3. HIGH CONTRAST UI: Tailwind CSS CDN (`<script src="https://cdn.tailwindcss.com"></script>`) හරහා Dark Mode UI එකක් සාදන්න. Dark background එකක් මත අනිවාර්යයෙන්ම සුදු පැහැති අකුරු (`text-white`) භාවිතා කරන්න.
+                4. REAL FUNCTIONALITY: බොත්තම් එබූ විට JavaScript හරහා අදාළ ක්‍රියාවන් සිදුවිය යුතුය.
                 
                 අතිශය වැදගත් නියෝගය:
-                කිසිදු පැහැදිලි කිරීමක්, කතා කිරීමක් හෝ අදහස් දැක්වීමක් (Comments) අවශ්‍ය නැත. 
-                ඔබගේ සම්පූර්ණ පිළිතුර අනිවාර්යයෙන්ම "<!DOCTYPE html>" යන්නෙන් ආරම්භ වී "</html>" යන්නෙන් අවසන් විය යුතුය. 
-                වෙනත් කිසිදු අමතර වචනයක් හෝ සලකුණක් මුලට හෝ අගට එක් නොකරන්න."""
+                කිසිදු පැහැදිලි කිරීමක් අවශ්‍ය නැත. සම්පූර්ණ කේතය අනිවාර්යයෙන්ම "<!DOCTYPE html>" යන්නෙන් ආරම්භ වී "</html>" යන්නෙන් අවසන් විය යුතුය."""
                 
                 response = model.generate_content(master_prompt)
                 raw_code = response.text
                 
-                # 💡 THE ULTIMATE REGEX EXTRACTOR
-                # AI එක මොනවා ලිව්වත්, <!DOCTYPE html> ඉඳලා </html> වෙනකන් විතරක් කපලා ගන්නවා
+                # HTML Slicing 
                 html_match = re.search(r'(<!DOCTYPE\s+html>.*?</html>)', raw_code, re.IGNORECASE | re.DOTALL)
                 
                 if html_match:
                     final_code = html_match.group(1).strip()
                 else:
-                    # Fallback (Just in case AI misses DOCTYPE)
                     html_match_fallback = re.search(r'(<html.*?>.*?</html>)', raw_code, re.IGNORECASE | re.DOTALL)
                     if html_match_fallback:
                         final_code = html_match_fallback.group(1).strip()
@@ -204,11 +198,12 @@ if st.session_state.app_code:
     col1, col2 = st.columns([1, 1])
     with col1:
         st.subheader("💻 Live Code Editor")
-        edited_code = st.text_area("කේතය වෙනස් කරන්න", st.session_state.app_code, height=450)
+        edited_code = st.text_area("කේතය වෙනස් කරන්න", st.session_state.app_code, height=600)
     with col2:
         st.subheader("📱 Instant Mobile View")
         st.markdown('<div class="mobile-frame">', unsafe_allow_html=True)
-        components.html(edited_code, height=430, scrolling=True)
+        # 💡 උස වැඩි කර ඇත, එවිට UI එක වඩාත් හොඳින් දැකගත හැක
+        components.html(edited_code, height=580, scrolling=True)
         st.markdown('</div>', unsafe_allow_html=True)
         
     # --- 6. GITHUB ACTIONS APK BUILD ENGINE ---
