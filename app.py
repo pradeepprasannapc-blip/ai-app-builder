@@ -1,4 +1,4 @@
-app_code = """import streamlit as st
+import streamlit as st
 import google.generativeai as genai
 import streamlit.components.v1 as components
 import re
@@ -10,7 +10,7 @@ import json
 # --- 1. PAGE CONFIGURATION & PREMIUM UI ---
 st.set_page_config(page_title="Base44 Pro - Cloud AI Factory", page_icon="⚡", layout="wide")
 
-st.markdown('''
+st.markdown("""
     <style>
     .stApp { background-color: #0d1117; color: #c9d1d9; }
     .stButton>button { 
@@ -24,7 +24,7 @@ st.markdown('''
     .stTextArea>div>div>textarea { background-color: #1e242c; color: #58a6ff; font-family: monospace; border-radius: 8px; }
     .mobile-frame { border: 6px solid #30363d; border-radius: 24px; padding: 10px; background: #000; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
     </style>
-''', unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
 # Session States
 if "app_code" not in st.session_state: st.session_state.app_code = None
@@ -149,9 +149,9 @@ with tab3:
                                     file_res = requests.get(f['download_url'])
                                     if file_res.status_code == 200:
                                         # Increase character limit per file to catch more logic
-                                        readme_content += f"\\n--- {f['name']} ---\\n{file_res.text[:2000]}"
+                                        readme_content += f"\n--- {f['name']} ---\n{file_res.text[:2000]}"
                     
-                    user_context = f"GitHub Repo: {repo_path}. \\nFiles Found: {', '.join(files_list)}. \\nProject Code Snippets: {readme_content}\\nCreate a COMPREHENSIVE app combining ALL of this logic."
+                    user_context = f"GitHub Repo: {repo_path}. \nFiles Found: {', '.join(files_list)}. \nProject Code Snippets: {readme_content}\nCreate a COMPREHENSIVE app combining ALL of this logic."
                     source_info = f"GitHub Deep Scanner ({repo_path})"
                     st.success("🐙 GitHub Repo එකේ සියලුම ප්‍රධාන ගොනු සාර්ථකව කියවන ලදී!")
                 else:
@@ -169,7 +169,7 @@ if st.button("🚀 GENERATE MASTER APP", use_container_width=True):
         with st.spinner(f"{ai_provider.split(' ')[0]} AI මඟින් Premium කේතය ලියමින් පවතී... (මඳක් රැඳී සිටින්න)"):
             try:
                 # 🚀 💡 FIX 2: AUTH & ADMIN ROLE BASED PROMPT 💡 🚀
-                master_prompt = f\"\"\"You are a World-Class Principal UI/UX Engineer and Full-Stack Architect.
+                master_prompt = f"""You are a World-Class Principal UI/UX Engineer and Full-Stack Architect.
 Source: {source_info}. Context: {user_context}.
 
 CRITICAL MISSION: Build an ultra-premium, visually stunning, fully comprehensive Single Page Application (SPA) based EXACTLY on the user's repo/context. 
@@ -185,7 +185,7 @@ CRITICAL TECHNICAL & ARCHITECTURE RULES:
 5. **ULTRA-PREMIUM UI**: Use Tailwind CSS (`<script src="https://cdn.tailwindcss.com"></script>`). Use glassmorphism, beautiful gradients, subtle borders, high-end typography, and FontAwesome (`<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">`).
 6. **SPA NAVIGATION**: Switch tabs using JavaScript (`display: none` / `block`). ABSOLUTELY NEVER use `<a href>` for internal navigation! It crashes the iframe.
 
-Output ONLY raw HTML code (starting with <!DOCTYPE html> and ending with </html>). NO Markdown, NO explanations.\"\"\"
+Output ONLY raw HTML code (starting with <!DOCTYPE html> and ending with </html>). NO Markdown, NO explanations."""
                 
                 raw_code = ""
                 clean_api_key = str(api_key).strip()
@@ -258,7 +258,7 @@ if st.session_state.app_code:
             wf_url = base64.b64decode("aHR0cHM6Ly9hcGkuZ2l0aHViLmNvbS9yZXBvcy8=").decode('utf-8') + f"{github_repo}/contents/.github/workflows/build.yml"
             wf_check = requests.get(wf_url, headers=headers)
             if wf_check.status_code != 200:
-                yaml_content = \"\"\"name: Build Android APK
+                yaml_content = """name: Build Android APK
 on:
   push:
     branches: [ main ]
@@ -289,7 +289,7 @@ jobs:
     - uses: actions/upload-artifact@v4
       with:
         name: premium-app-apk
-        path: myapp/platforms/android/app/build/outputs/apk/debug/app-debug.apk\"\"\"
+        path: myapp/platforms/android/app/build/outputs/apk/debug/app-debug.apk"""
                 requests.put(wf_url, headers=headers, json={"message": "Auto-setup Cloud Build Workflow", "content": base64.b64encode(yaml_content.encode('utf-8')).decode('utf-8')})
             
             file_url = base64.b64decode("aHR0cHM6Ly9hcGkuZ2l0aHViLmNvbS9yZXBvcy8=").decode('utf-8') + f"{github_repo}/contents/index.html"
@@ -311,7 +311,7 @@ jobs:
     # --- 7. MANUAL COMPILER TRACKER ---
     if st.session_state.build_running:
         st.info("🛠️ Cloud Build එක සිදුවෙමින් පවතී... මෙය සාමාන්‍යයෙන් විනාඩි 2-3ක් ගත වේ.")
-        if st.button("🔄 තත්ත්වය පරීක්ෂා জ্ঞකරන්න (Check Status)", use_container_width=True):
+        if st.button("🔄 තත්ත්වය පරීක්ෂා කරන්න (Check Status)", use_container_width=True):
             try:
                 runs_api = base64.b64decode("aHR0cHM6Ly9hcGkuZ2l0aHViLmNvbS9yZXBvcy8=").decode('utf-8') + f"{github_repo}/actions/runs"
                 run_res = requests.get(runs_api, headers={"Authorization": f"Bearer {github_token}", "Accept": "application/vnd.github.v3+json"}).json()
@@ -341,7 +341,3 @@ jobs:
         st.success("🎯 සාර්ථකයි! ඔබගේ APK ගොනුව සූදානම්.")
         st.balloons()
         st.link_button("📥 DOWNLOAD OFFICIAL APK (ZIP)", st.session_state.apk_url, use_container_width=True)
-"""
-
-with open("app.py", "w", encoding="utf-8") as f:
-    f.write(app_code)
