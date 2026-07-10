@@ -138,7 +138,6 @@ with tab3:
                 res = requests.get(gh_contents_url, headers={"User-Agent": "Mozilla/5.0"})
                 if res.status_code == 200:
                     files_list, readme_content = [], ""
-                    # 💡 FIX 1: Deep File Scanner - Read multiple file types, not just 4 files.
                     valid_extensions = ('.md', '.py', '.js', '.jsx', '.ts', '.tsx', '.json', '.html', '.css')
                     
                     for f in res.json():
@@ -148,8 +147,8 @@ with tab3:
                                 if 'download_url' in f and f['download_url']:
                                     file_res = requests.get(f['download_url'])
                                     if file_res.status_code == 200:
-                                        # Increase character limit per file to catch more logic
-                                        readme_content += f"\n--- {f['name']} ---\n{file_res.text[:2000]}"
+                                        # Now capturing more depth from files
+                                        readme_content += f"\n--- {f['name']} ---\n{file_res.text[:3000]}"
                     
                     user_context = f"GitHub Repo: {repo_path}. \nFiles Found: {', '.join(files_list)}. \nProject Code Snippets: {readme_content}\nCreate a COMPREHENSIVE app combining ALL of this logic."
                     source_info = f"GitHub Deep Scanner ({repo_path})"
@@ -166,26 +165,26 @@ if st.button("🚀 GENERATE MASTER APP", use_container_width=True):
     elif not user_context:
         st.warning("⚠️ කරුණාකර තොරතුරු ඇතුළත් කරන්න.")
     else:
-        with st.spinner(f"{ai_provider.split(' ')[0]} AI මඟින් Premium කේතය ලියමින් පවතී... (මඳක් රැඳී සිටින්න)"):
+        with st.spinner(f"{ai_provider.split(' ')[0]} AI මඟින් දැවැන්ත Premium කේතය ලියමින් පවතී... (මඳක් රැඳී සිටින්න)"):
             try:
-                # 🚀 💡 FIX 2: AUTH & ADMIN ROLE BASED PROMPT 💡 🚀
-                master_prompt = f"""You are a World-Class Principal UI/UX Engineer and Full-Stack Architect.
+                # 🚀 💡 THE ULTIMATE "NO SHORTCUTS" PROMPT 💡 🚀
+                master_prompt = f"""You are a World-Class Principal UI/UX Engineer and Full-Stack Architect at a top-tier tech company (like Binance or Stripe).
 Source: {source_info}. Context: {user_context}.
 
-CRITICAL MISSION: Build an ultra-premium, visually stunning, fully comprehensive Single Page Application (SPA) based EXACTLY on the user's repo/context. 
+CRITICAL MISSION: Build a MASSIVE, ultra-premium, visually stunning, fully comprehensive Single Page Application (SPA).
+ABSOLUTE RULE: DO NOT SUMMARIZE. DO NOT USE PLACEHOLDERS LIKE `<!-- Add more code here -->`. Write the ENTIRE, EXHAUSTIVE CODE, even if it is thousands of lines long.
 
 CRITICAL TECHNICAL & ARCHITECTURE RULES:
-1. **AUTHENTICATION FIRST (MANDATORY)**: The app MUST start with a beautiful, professional Login/Signup screen. Users CANNOT see the main app until they "log in". Build the JS logic to hide the login screen and show the app when a button is clicked.
-2. **ROLE-BASED ACCESS CONTROL (ADMIN VS USER)**: 
-   - You MUST create separate views/dashboards for 'Regular Users' and 'Admins'. 
-   - Hide sensitive information, settings, and repo-specific backend controls in a dedicated "Admin Panel".
-   - (Mock this logic: if login is 'admin', show admin tabs; otherwise show regular tabs).
-3. **COMPREHENSIVE INTEGRATION**: The user complained that previous apps left out files. You MUST analyze ALL provided code snippets. Do NOT leave out any feature. If the repo has 10 features, build UI for ALL 10 features. Combine them into one massive, cohesive platform.
-4. **DOMAIN ADAPTATION**: If Trading: use TradingView charts & order books. If E-commerce: Product grids & Cart. Match the UI vibe perfectly.
-5. **ULTRA-PREMIUM UI**: Use Tailwind CSS (`<script src="https://cdn.tailwindcss.com"></script>`). Use glassmorphism, beautiful gradients, subtle borders, high-end typography, and FontAwesome (`<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">`).
-6. **SPA NAVIGATION**: Switch tabs using JavaScript (`display: none` / `block`). ABSOLUTELY NEVER use `<a href>` for internal navigation! It crashes the iframe.
+1. **AUTHENTICATION (MANDATORY)**: You MUST build beautiful, interactive 'Login' AND 'Register' (Sign Up) screens. Users cannot see the main app without interacting with these.
+2. **ROLE-BASED ACCESS**: 
+   - If user logs in as 'admin', route to a highly advanced 'Admin Dashboard' (User Management, System Logs, Advanced Analytics, Trading Engine controls).
+   - If user logs in normally, route to the 'User Dashboard'.
+3. **DEEP REPO INTEGRATION (NO SHORTCUTS)**: You MUST deeply analyze the provided GitHub repo snippets. Translate the EXACT backend logic (e.g., Trading Signals, RSI, MACD, API algorithms) into JavaScript logic within this SPA. Build the exact UI components needed to operate that logic (e.g., 'Live Signal Panel', 'Auto-Trade Bot Toggle'). Make it actually functional using JS math.
+4. **TRADING / ADVANCED UI**: Use Tailwind CSS (`<script src="https://cdn.tailwindcss.com"></script>`), deep dark themes, glassmorphism, FontAwesome. If it's a trading app, you MUST include advanced TradingView charts (`lightweight-charts`), Order Books, and Live Signal Feeds. 
+5. **JAVASCRIPT SIMULATION**: Write extensive JS to make the app feel alive. Use `setInterval` to simulate live data ticking on the charts and signal updates based on the repo's algorithms.
+6. **SPA NAVIGATION**: Switch tabs using JavaScript (`display: none` / `block`). NEVER use `<a href>` for internal navigation! It crashes our iframe.
 
-Output ONLY raw HTML code (starting with <!DOCTYPE html> and ending with </html>). NO Markdown, NO explanations."""
+Output ONLY raw HTML code (starting with <!DOCTYPE html> and ending with </html>). NO Markdown, NO explanations. Write the ultimate, complete version."""
                 
                 raw_code = ""
                 clean_api_key = str(api_key).strip()
@@ -206,7 +205,7 @@ Output ONLY raw HTML code (starting with <!DOCTYPE html> and ending with </html>
                         "model": selected_model, 
                         "messages": [{"role": "user", "content": master_prompt}], 
                         "max_tokens": 8000,
-                        "temperature": 0.3
+                        "temperature": 0.4
                     }
                     res = requests.post(groq_url, headers=headers, json=payload)
                     if res.status_code == 200:
