@@ -91,11 +91,11 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_key):
         db.table("generated_apps").update({"status": "completed", "app_code": generated_code}).eq("id", app_id).execute()
         
     except Exception as e:
-        db.table("generated_apps").update({"status": "failed"}).eq("id", app_id).execute()
-        print(f"Worker Error on {app_id}: {e}")
+        # MAGIC: AI එක කැඩුනොත් දෝෂය කෙලින්ම Database එකට දානවා!
+        error_msg = f"API Error: {str(e)}"
+        db.table("generated_apps").update({"status": "failed", "app_code": error_msg}).eq("id", app_id).execute()
 
 def background_recovery_worker():
-    """මෙය Streamlit Restart වුණත් Pending ඒවා හොයාගෙන හදන Worker එකයි"""
     try:
         groq_key = st.secrets.get("GROQ_API_KEY", "")
         gemini_key = st.secrets.get("GEMINI_API_KEY", "")
@@ -105,8 +105,8 @@ def background_recovery_worker():
         
         for app in pending_apps.data:
             process_single_app(app, groq_key, gemini_key, st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
-    except Exception as e:
-        print(f"Recovery Worker Failed: {e}")
+    except Exception:
+        pass
 
 if not st.session_state.worker_started:
     threading.Thread(target=background_recovery_worker, daemon=True).start()
@@ -156,18 +156,13 @@ def login(email, password):
             
             st.rerun()
     except Exception as e:
-        if "Invalid login credentials" in str(e):
-            st.error("⚠️ Email හෝ Password වැරදියි.")
-        else:
-            st.error(f"⚠️ දෝෂයකි: {str(e)}")
+        st.error("⚠️ Email හෝ Password වැරදියි.")
 
 def register(email, password):
     try:
         res = supabase.auth.sign_up({"email": email, "password": password})
         if res.user:
             st.success("🎉 ලියාපදිංචිය සාර්ථකයි! කරුණාකර ඔබගේ Email එකට ගොස් ගිණුම Verify කරන්න.")
-        else:
-            st.error("ලියාපදිංචි වීමේ දෝෂයකි.")
     except Exception as e:
         st.error(f"Error: {e}")
 
@@ -254,7 +249,8 @@ def render_generator_dashboard():
                     st.success("✅ සාර්ථකයි! පහතින් කේතය බලාගන්න.")
                     st.code(app.get('app_code', ''), language='python')
                 elif app['status'] == 'failed':
-                    st.error("❌ දෝෂයකි. කරුණාකර නැවත උත්සාහ කරන්න.")
+                    # මෙතනින් අපිට Error එක බලාගන්න පුළුවන්
+                    st.error(f"❌ දෝෂයකි: {app.get('app_code', 'නැවත උත්සාහ කරන්න.')}")
                 
                 if st.button("🔄 Refresh", key=f"ref_{app['id']}"):
                     st.rerun()
