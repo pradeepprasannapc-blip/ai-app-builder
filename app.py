@@ -19,7 +19,6 @@ if 'user' not in st.session_state:
 if 'role' not in st.session_state:
     st.session_state.role = None
 if 'device_id' not in st.session_state:
-    # A simple device fingerprint placeholder
     st.session_state.device_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, socket.gethostname()))
 
 # --- HELPER FUNCTIONS ---
@@ -34,12 +33,9 @@ def get_user_ip():
 # --- AUTHENTICATION FUNCTIONS ---
 def register(email, password):
     try:
-        # Supabase Auth Sign Up
         res = supabase.auth.sign_up({"email": email, "password": password})
         if res.user:
             st.success("🎉 ලියාපදිංචිය සාර්ථකයි! කරුණාකර ඔබගේ Email එකට ගොස් ගිණුම Verify කරන්න.")
-            
-            # Log Device on Registration
             supabase.table("device_logs").insert({
                 "user_id": res.user.id,
                 "device_id": st.session_state.device_id,
@@ -59,7 +55,6 @@ def login(email, password):
         res = supabase.auth.sign_in_with_password({"email": email, "password": password})
         user_id = res.user.id
         
-        # Get User Role from our custom table
         user_data = supabase.table("users").select("role, status").eq("id", user_id).execute()
         
         if user_data.data:
@@ -71,7 +66,6 @@ def login(email, password):
             st.session_state.role = user_data.data[0]['role']
             st.success(f"සාර්ථකයි! {st.session_state.role.upper()} ලෙස ලොග් විය.")
             
-            # Log Device on Login
             supabase.table("device_logs").insert({
                 "user_id": user_id,
                 "device_id": st.session_state.device_id,
@@ -90,17 +84,18 @@ def login(email, password):
             st.error(f"⚠️ දෝෂයකි: {error_msg}")
 
 # --- BACKGROUND TASK ENGINE (AI GENERATOR) ---
-def generate_app_background(app_id, source_link):
-    """මේක තමයි Timeout නොවී පසුබිමෙන් දුවන AI මොළය"""
+def generate_app_background(app_id, final_source_link):
+    """Timeout නොවී පසුබිමෙන් දුවන AI මොළය"""
     try:
-        # 1. Status එක 'processing' කරන්න
+        # 1. Processing
         supabase.table("generated_apps").update({"status": "processing"}).eq("id", app_id).execute()
         
-        # 2. මෙතන තමයි ඔයාගේ අනාගත AI Logic එක එන්නේ
-        time.sleep(30) # AI එක හිතන වෙලාව
+        # 2. AI Thinking time
+        time.sleep(30) 
         
-        # 3. AI එකෙන් ජෙනරේට් කරපු කේතය (Dummy Code for now)
-        generated_code = f"""# AI Generated App from: {source_link}
+        # 3. Dummy Code Generation
+        generated_code = f"""# AI Generated App
+# Source Data: {final_source_link}
 import streamlit as st
 
 st.set_page_config(page_title="Generated App")
@@ -109,7 +104,7 @@ st.write("This app was created by AI App Factory!")
 st.success("Successfully built from source!")
 """
         
-        # 4. වැඩේ ඉවර වුණාම Database එකේ සේව් කිරීම (Completed)
+        # 4. Completed
         supabase.table("generated_apps").update({
             "status": "completed", 
             "app_code": generated_code
@@ -122,9 +117,7 @@ st.success("Successfully built from source!")
 def render_generator_dashboard():
     st.markdown("### 🛠️ App Generation Engine")
     
-    # ඩයිනමික් UI එක (Radio බොත්තම ඔබද්දී වෙනස් වෙන්න Form එකෙන් එළියට ගත්තා)
     app_name = st.text_input("App එකේ නම", placeholder="Ex: My E-commerce App")
-    
     upload_option = st.radio("Source එක ලබා දෙන ආකාරය තෝරන්න:", ["🔗 Link එකක් ලබා දීම", "📁 File එකක් Upload කිරීම"], horizontal=True)
     
     source_link = ""
@@ -139,14 +132,30 @@ def render_generator_dashboard():
     
     if st.button("🚀 Generate App", use_container_width=True, type="primary"):
         if app_name and (source_link or uploaded_file):
-            # ෆයිල් එකක් දුන්නොත් ඒකේ නම ගන්නවා, ලින්ක් එකක් දුන්නොත් ඒක ගන්නවා
-            file_name_or_link = source_link if upload_option == "🔗 Link එකක් ලබා දීම" else uploaded_file.name
             
+            final_source_link = ""
+            
+            # --- CLOUD UPLOAD LOGIC ---
+            if upload_option == "📁 File එකක් Upload කිරීම" and uploaded_file:
+                with st.spinner("☁️ File එක Cloud එකට Upload වෙමින් පවතී..."):
+                    # ෆයිල් එකේ නමට වෙලාව එකතු කරනවා (එකම නම තියෙන ෆයිල් ගැටෙන්නේ නැති වෙන්න)
+                    file_path = f"{st.session_state.user.id}/{int(time.time())}_{uploaded_file.name}"
+                    file_bytes = uploaded_file.getvalue()
+                    
+                    # Supabase Storage එකට අප්ලෝඩ් කිරීම
+                    supabase.storage.from_("app_sources").upload(file_path, file_bytes)
+                    
+                    # අප්ලෝඩ් කරපු ෆයිල් එකේ Public Link එක ලබා ගැනීම
+                    final_source_link = supabase.storage.from_("app_sources").get_public_url(file_path)
+            else:
+                final_source_link = source_link
+            # --------------------------
+
             # 1. Database එකේ 'pending' විදිහට සේව් කරනවා
             res = supabase.table("generated_apps").insert({
                 "owner_id": st.session_state.user.id,
                 "app_name": app_name,
-                "source_link": file_name_or_link,
+                "source_link": final_source_link,
                 "is_visible": not is_private,
                 "status": "pending"
             }).execute()
@@ -154,8 +163,8 @@ def render_generator_dashboard():
             if res.data:
                 app_id = res.data[0]['id']
                 
-                # 2. Background Thread එක පටන් ගන්නවා (UI එක හිරවෙන්නේ නෑ)
-                thread = threading.Thread(target=generate_app_background, args=(app_id, file_name_or_link))
+                # 2. Background Thread එක පටන් ගන්නවා
+                thread = threading.Thread(target=generate_app_background, args=(app_id, final_source_link))
                 thread.start()
                 
                 st.success("✅ ඔබගේ ඇප් එක සාදමින් පවතී! පහත ලැයිස්තුවෙන් තත්ත්වය බලාගන්න.")
@@ -167,7 +176,6 @@ def render_generator_dashboard():
     st.markdown("---")
     st.markdown("### 📂 ඔබගේ Apps")
     
-    # Database එකෙන් යූසර්ගේ ඇප්ස් ටික අරගෙන පෙන්නනවා
     apps_data = supabase.table("generated_apps").select("*").eq("owner_id", st.session_state.user.id).order("created_at", desc=True).execute()
     
     if apps_data.data:
@@ -186,18 +194,15 @@ def render_generator_dashboard():
                 elif app['status'] == 'failed':
                     st.error("❌ දෝෂයකි. කරුණාකර නැවත උත්සාහ කරන්න.")
                 
-                # Refresh බොත්තම
                 if st.button("🔄 Refresh Status", key=f"ref_{app['id']}"):
                     st.rerun()
     else:
         st.info("ඔබ තවම කිසිදු ඇප් එකක් සාදා නැත.")
 
-
 # ==========================================
 #               MAIN UI LOGIC
 # ==========================================
 
-# --- NOT LOGGED IN ---
 if not st.session_state.user:
     st.markdown("<h1 style='text-align: center; color: #4B4B4B;'>⚡ AI App Factory</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center;'>Welcome to the Master App Generation Engine</p>", unsafe_allow_html=True)
@@ -228,7 +233,6 @@ if not st.session_state.user:
                     else:
                         st.error("Passwords සමාන නොවේ.")
 
-# --- LOGGED IN ---
 else:
     st.sidebar.title(f"Hi, {st.session_state.user.email}")
     st.sidebar.info(f"🔑 Role: **{st.session_state.role.upper()}**")
@@ -239,10 +243,8 @@ else:
         st.session_state.role = None
         st.rerun()
 
-    # --- ROLE BASED ROUTING ---
     if st.session_state.role == 'owner':
         st.title("👑 Owner Dashboard (Total Control)")
-        st.write("පද්ධතියේ සම්පූර්ණ පාලනය මෙතැනින්.")
         tab1, tab2, tab3 = st.tabs(["🚀 App Generator", "👥 User Management", "⚙️ System Settings"])
         with tab1:
             render_generator_dashboard()
@@ -253,12 +255,11 @@ else:
             
     elif st.session_state.role == 'admin':
         st.title("🛡️ Admin Dashboard")
-        st.write("Payment Approvals සහ යූසර් කළමනාකරණය.")
         render_generator_dashboard()
         
     elif st.session_state.role == 'moderator':
         st.title("👁️ Moderator Dashboard")
-        st.write("Support Tickets සහ User Warnings මෙතැනින්.")
+        st.info("Support Tickets සහ User Warnings මෙතැනින්.")
         
     elif st.session_state.role == 'user':
         st.title("🚀 App Generator Dashboard")
