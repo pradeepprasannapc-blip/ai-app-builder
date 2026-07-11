@@ -38,6 +38,7 @@ def get_user_ip():
     except:
         return "Unknown IP"
 
+# --- MARKETING NOTIFICATIONS (SOCIAL PROOF) ---
 def trigger_social_proof():
     if st.session_state.show_toast:
         messages = [
@@ -65,6 +66,7 @@ def login(email, password):
             current_pkg = user_data.data[0].get('package', 'free')
             expires_str = user_data.data[0].get('expires_at')
             
+            # --- AUTO EXPIRE LOGIC ---
             if current_pkg != 'free' and expires_str:
                 expire_date = datetime.fromisoformat(expires_str.replace('Z', '+00:00'))
                 current_date = datetime.now(timezone.utc)
@@ -109,7 +111,7 @@ def register(email, password):
         st.error(f"Error: {e}")
 
 # --- AI BACKGROUND TASK ENGINE ---
-def generate_app_background(app_id, app_name, final_source_link, selected_ai_model):
+def generate_app_background(app_id, app_name, final_source_link, selected_ai_model, groq_key, gemini_key):
     try:
         supabase.table("generated_apps").update({"status": "processing"}).eq("id", app_id).execute()
         
@@ -126,21 +128,21 @@ def generate_app_background(app_id, app_name, final_source_link, selected_ai_mod
         
         generated_code = ""
 
-        # යූසර් තෝරපු AI මොඩලය අනුව වැඩ කිරීම
+        # තෝරාගත් AI මොඩලය මත පදනම්ව කේතය ලියවීම
         if selected_ai_model == 'gemini':
-            genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+            genai.configure(api_key=gemini_key)
             model = genai.GenerativeModel('gemini-1.5-pro')
             response = model.generate_content(prompt)
             generated_code = response.text
         else:
-            client = groq.Groq(api_key=st.secrets["GROQ_API_KEY"])
+            client = groq.Groq(api_key=groq_key)
             chat_completion = client.chat.completions.create(
                 messages=[{"role": "user", "content": prompt}],
                 model="llama3-70b-8192", 
             )
             generated_code = chat_completion.choices[0].message.content
 
-        # Markdown කෑලි සුද්ද කිරීම
+        # Markdown කෑලි සුද්ද කිරීම (Cleaning Magic)
         if "```python" in generated_code:
             generated_code = generated_code.split("```python")[1]
         if "```" in generated_code:
@@ -180,7 +182,6 @@ def render_generator_dashboard():
     with col1:
         upload_option = st.radio("Source එක ලබා දෙන ආකාරය:", ["🔗 Link එකක් ලබා දීම", "📁 File එකක් Upload කිරීම"], horizontal=True)
     with col2:
-        # යූසර්ට AI එක තෝරන්න දෙන කොටස
         ai_model_choice = st.radio("AI එන්ජිම තෝරන්න:", ["⚡ Groq (Fast)", "🧠 Gemini (Pro)"], horizontal=True)
         selected_model = "gemini" if "Gemini" in ai_model_choice else "groq"
     
@@ -204,8 +205,10 @@ def render_generator_dashboard():
 
             res = supabase.table("generated_apps").insert({"owner_id": st.session_state.user.id, "app_name": app_name, "source_link": final_source_link, "is_visible": not is_private, "status": "pending"}).execute()
             if res.data:
-                # තෝරාගත් AI මොඩලය Thread එකට යවනවා
-                threading.Thread(target=generate_app_background, args=(res.data[0]['id'], app_name, final_source_link, selected_model)).start()
+                # මෙතනදි API keys දෙක Thread එකට පාස් කරනවා
+                groq_key = st.secrets.get("GROQ_API_KEY", "")
+                gemini_key = st.secrets.get("GEMINI_API_KEY", "")
+                threading.Thread(target=generate_app_background, args=(res.data[0]['id'], app_name, final_source_link, selected_model, groq_key, gemini_key)).start()
                 st.success(f"✅ ඔබගේ ඇප් එක {selected_model.upper()} AI මගින් සාදමින් පවතී! පහත ලැයිස්තුවෙන් තත්ත්වය බලාගන්න.")
         else:
             st.error("කරුණාකර නම සහ ලින්ක් එක / File එක ලබා දෙන්න.")
