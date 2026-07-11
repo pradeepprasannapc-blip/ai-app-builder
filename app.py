@@ -44,7 +44,7 @@ def register(email, password):
                 "user_id": res.user.id,
                 "device_id": st.session_state.device_id,
                 "ip_address": get_user_ip(),
-                "country": "Sri Lanka" # Placeholder for Geolocation
+                "country": "Sri Lanka"
             }).execute()
         else:
             st.error("ලියාපදිංචි වීමේ දෝෂයකි.")
@@ -82,7 +82,6 @@ def login(email, password):
             st.rerun()
     except Exception as e:
         error_msg = str(e)
-        # Email verify කරලා නැති නම් එන පණිවිඩය අල්ලගමු
         if "Email not confirmed" in error_msg:
             st.warning("⚠️ කරුණාකර ඔබේ Email ගිණුමට ගොස් අපි එවූ ලින්ක් එක Click කර ගිණුම Verify කරන්න.")
         elif "Invalid login credentials" in error_msg:
@@ -97,8 +96,7 @@ def generate_app_background(app_id, source_link):
         # 1. Status එක 'processing' කරන්න
         supabase.table("generated_apps").update({"status": "processing"}).eq("id", app_id).execute()
         
-        # 2. මෙතන තමයි ඔයාගේ අනාගත AI Logic එක එන්නේ (Gemini/OpenAI API Call)
-        # දැනට අපි මේක තත්පර 30ක් යන වැඩක් විදිහට හිතමු (Sleep)
+        # 2. මෙතන තමයි ඔයාගේ අනාගත AI Logic එක එන්නේ
         time.sleep(30) # AI එක හිතන වෙලාව
         
         # 3. AI එකෙන් ජෙනරේට් කරපු කේතය (Dummy Code for now)
@@ -118,43 +116,53 @@ st.success("Successfully built from source!")
         }).eq("id", app_id).execute()
         
     except Exception as e:
-        # මොනවා හරි අවුලක් ගියොත් Status එක 'failed' වෙනවා
         supabase.table("generated_apps").update({"status": "failed"}).eq("id", app_id).execute()
 
 # --- UI: APP GENERATOR DASHBOARD ---
 def render_generator_dashboard():
     st.markdown("### 🛠️ App Generation Engine")
     
-    with st.form("app_gen_form"):
-        app_name = st.text_input("App එකේ නම", placeholder="Ex: My E-commerce App")
+    # ඩයිනමික් UI එක (Radio බොත්තම ඔබද්දී වෙනස් වෙන්න Form එකෙන් එළියට ගත්තා)
+    app_name = st.text_input("App එකේ නම", placeholder="Ex: My E-commerce App")
+    
+    upload_option = st.radio("Source එක ලබා දෙන ආකාරය තෝරන්න:", ["🔗 Link එකක් ලබා දීම", "📁 File එකක් Upload කිරීම"], horizontal=True)
+    
+    source_link = ""
+    uploaded_file = None
+    
+    if upload_option == "🔗 Link එකක් ලබා දීම":
         source_link = st.text_input("Zip File එකේ හෝ Repo එකේ ලින්ක් එක", placeholder="https://github.com/... හෝ GDrive Link")
-        is_private = st.checkbox("මේ ඇප් එක හංගලා තියන්න (Private)", value=False)
+    else:
+        uploaded_file = st.file_uploader("ඔබගේ File එක තෝරන්න (Zip, Py, Txt)", type=['zip', 'txt', 'py'])
         
-        submitted = st.form_submit_button("🚀 Generate App", use_container_width=True)
-        
-        if submitted:
-            if app_name and source_link:
-                # 1. මුලින්ම Database එකේ 'pending' විදිහට සේව් කරනවා
-                res = supabase.table("generated_apps").insert({
-                    "owner_id": st.session_state.user.id,
-                    "app_name": app_name,
-                    "source_link": source_link,
-                    "is_visible": not is_private,
-                    "status": "pending"
-                }).execute()
+    is_private = st.checkbox("මේ ඇප් එක හංගලා තියන්න (Private)", value=False)
+    
+    if st.button("🚀 Generate App", use_container_width=True, type="primary"):
+        if app_name and (source_link or uploaded_file):
+            # ෆයිල් එකක් දුන්නොත් ඒකේ නම ගන්නවා, ලින්ක් එකක් දුන්නොත් ඒක ගන්නවා
+            file_name_or_link = source_link if upload_option == "🔗 Link එකක් ලබා දීම" else uploaded_file.name
+            
+            # 1. Database එකේ 'pending' විදිහට සේව් කරනවා
+            res = supabase.table("generated_apps").insert({
+                "owner_id": st.session_state.user.id,
+                "app_name": app_name,
+                "source_link": file_name_or_link,
+                "is_visible": not is_private,
+                "status": "pending"
+            }).execute()
+            
+            if res.data:
+                app_id = res.data[0]['id']
                 
-                if res.data:
-                    app_id = res.data[0]['id']
-                    
-                    # 2. Background Thread එක පටන් ගන්නවා (UI එක හිරවෙන්නේ නෑ)
-                    thread = threading.Thread(target=generate_app_background, args=(app_id, source_link))
-                    thread.start()
-                    
-                    st.success("✅ ඔබගේ ඇප් එක සාදමින් පවතී! පහත ලැයිස්තුවෙන් තත්ත්වය බලාගන්න.")
-                else:
-                    st.error("Database Error: පද්ධතියේ දෝෂයක් ඇති විය.")
+                # 2. Background Thread එක පටන් ගන්නවා (UI එක හිරවෙන්නේ නෑ)
+                thread = threading.Thread(target=generate_app_background, args=(app_id, file_name_or_link))
+                thread.start()
+                
+                st.success("✅ ඔබගේ ඇප් එක සාදමින් පවතී! පහත ලැයිස්තුවෙන් තත්ත්වය බලාගන්න.")
             else:
-                st.error("කරුණාකර නම සහ ලින්ක් එක ලබා දෙන්න.")
+                st.error("Database Error: පද්ධතියේ දෝෂයක් ඇති විය.")
+        else:
+            st.error("කරුණාකර නම සහ ලින්ක් එක / File එක ලබා දෙන්න.")
 
     st.markdown("---")
     st.markdown("### 📂 ඔබගේ Apps")
@@ -165,13 +173,13 @@ def render_generator_dashboard():
     if apps_data.data:
         for app in apps_data.data:
             with st.expander(f"📦 {app['app_name']} - Status: {app['status'].upper()}"):
-                st.write(f"**Link:** {app['source_link']}")
+                st.write(f"**Source:** {app['source_link']}")
                 st.write(f"**Visibility:** {'Public' if app['is_visible'] else 'Private'}")
                 
                 if app['status'] == 'pending':
                     st.info("⏳ පෝලිමේ ඇත...")
                 elif app['status'] == 'processing':
-                    st.warning("⚙️ AI එක මගින් කේතය ලියමින් පවතී...")
+                    st.warning("⚙️ AI එක මගින් කේතය ලියමින් පවතී... (කරුණාකර මඳ වේලාවකින් Refresh කරන්න)")
                 elif app['status'] == 'completed':
                     st.success("✅ සාර්ථකයි! පහතින් කේතය බලාගන්න.")
                     st.code(app['app_code'], language='python')
