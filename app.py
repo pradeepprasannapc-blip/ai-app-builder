@@ -18,6 +18,8 @@ if 'user' not in st.session_state:
     st.session_state.user = None
 if 'role' not in st.session_state:
     st.session_state.role = None
+if 'package' not in st.session_state:
+    st.session_state.package = 'free'
 if 'device_id' not in st.session_state:
     st.session_state.device_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, socket.gethostname()))
 
@@ -55,7 +57,8 @@ def login(email, password):
         res = supabase.auth.sign_in_with_password({"email": email, "password": password})
         user_id = res.user.id
         
-        user_data = supabase.table("users").select("role, status").eq("id", user_id).execute()
+        # මෙතනදි අපි 'package' එකත් අරගන්නවා
+        user_data = supabase.table("users").select("role, status, package").eq("id", user_id).execute()
         
         if user_data.data:
             if user_data.data[0]['status'] == 'banned':
@@ -64,6 +67,8 @@ def login(email, password):
                 
             st.session_state.user = res.user
             st.session_state.role = user_data.data[0]['role']
+            st.session_state.package = user_data.data[0].get('package', 'free') # Default to free if null
+            
             st.success(f"සාර්ථකයි! {st.session_state.role.upper()} ලෙස ලොග් විය.")
             
             supabase.table("device_logs").insert({
@@ -83,17 +88,11 @@ def login(email, password):
         else:
             st.error(f"⚠️ දෝෂයකි: {error_msg}")
 
-# --- BACKGROUND TASK ENGINE (AI GENERATOR) ---
+# --- BACKGROUND TASK ENGINE ---
 def generate_app_background(app_id, final_source_link):
-    """Timeout නොවී පසුබිමෙන් දුවන AI මොළය"""
     try:
-        # 1. Processing
         supabase.table("generated_apps").update({"status": "processing"}).eq("id", app_id).execute()
-        
-        # 2. AI Thinking time
         time.sleep(30) 
-        
-        # 3. Dummy Code Generation
         generated_code = f"""# AI Generated App
 # Source Data: {final_source_link}
 import streamlit as st
@@ -103,13 +102,7 @@ st.title("My Awesome Generated App")
 st.write("This app was created by AI App Factory!")
 st.success("Successfully built from source!")
 """
-        
-        # 4. Completed
-        supabase.table("generated_apps").update({
-            "status": "completed", 
-            "app_code": generated_code
-        }).eq("id", app_id).execute()
-        
+        supabase.table("generated_apps").update({"status": "completed", "app_code": generated_code}).eq("id", app_id).execute()
     except Exception as e:
         supabase.table("generated_apps").update({"status": "failed"}).eq("id", app_id).execute()
 
@@ -117,6 +110,19 @@ st.success("Successfully built from source!")
 def render_generator_dashboard():
     st.markdown("### 🛠️ App Generation Engine")
     
+    # --- Package Limit Check ---
+    res_count = supabase.table("generated_apps").select("id", count="exact").eq("owner_id", st.session_state.user.id).execute()
+    app_count = res_count.count if res_count.count else 0
+    
+    max_apps = 1 if st.session_state.package == 'free' else (10 if st.session_state.package == 'silver' else 9999)
+    
+    st.info(f"ඔබගේ පැකේජය: **{st.session_state.package.upper()}** | සාදා ඇති Apps: **{app_count}/{'Unlimited' if max_apps == 9999 else max_apps}**")
+    
+    if app_count >= max_apps:
+        st.error("⚠️ ඔබගේ පැකේජයේ උපරිම සීමාවට පැමිණ ඇත. තවත් Apps සෑදීමට කරුණාකර ඔබගේ පැකේජය Upgrade කරන්න.")
+        return # Form එක පෙන්වන්නේ නෑ
+    # ---------------------------
+
     app_name = st.text_input("App එකේ නම", placeholder="Ex: My E-commerce App")
     upload_option = st.radio("Source එක ලබා දෙන ආකාරය තෝරන්න:", ["🔗 Link එකක් ලබා දීම", "📁 File එකක් Upload කිරීම"], horizontal=True)
     
@@ -132,26 +138,17 @@ def render_generator_dashboard():
     
     if st.button("🚀 Generate App", use_container_width=True, type="primary"):
         if app_name and (source_link or uploaded_file):
-            
             final_source_link = ""
             
-            # --- CLOUD UPLOAD LOGIC ---
             if upload_option == "📁 File එකක් Upload කිරීම" and uploaded_file:
                 with st.spinner("☁️ File එක Cloud එකට Upload වෙමින් පවතී..."):
-                    # ෆයිල් එකේ නමට වෙලාව එකතු කරනවා (එකම නම තියෙන ෆයිල් ගැටෙන්නේ නැති වෙන්න)
                     file_path = f"{st.session_state.user.id}/{int(time.time())}_{uploaded_file.name}"
                     file_bytes = uploaded_file.getvalue()
-                    
-                    # Supabase Storage එකට අප්ලෝඩ් කිරීම
                     supabase.storage.from_("app_sources").upload(file_path, file_bytes)
-                    
-                    # අප්ලෝඩ් කරපු ෆයිල් එකේ Public Link එක ලබා ගැනීම
                     final_source_link = supabase.storage.from_("app_sources").get_public_url(file_path)
             else:
                 final_source_link = source_link
-            # --------------------------
 
-            # 1. Database එකේ 'pending' විදිහට සේව් කරනවා
             res = supabase.table("generated_apps").insert({
                 "owner_id": st.session_state.user.id,
                 "app_name": app_name,
@@ -162,11 +159,8 @@ def render_generator_dashboard():
             
             if res.data:
                 app_id = res.data[0]['id']
-                
-                # 2. Background Thread එක පටන් ගන්නවා
                 thread = threading.Thread(target=generate_app_background, args=(app_id, final_source_link))
                 thread.start()
-                
                 st.success("✅ ඔබගේ ඇප් එක සාදමින් පවතී! පහත ලැයිස්තුවෙන් තත්ත්වය බලාගන්න.")
             else:
                 st.error("Database Error: පද්ධතියේ දෝෂයක් ඇති විය.")
@@ -175,7 +169,6 @@ def render_generator_dashboard():
 
     st.markdown("---")
     st.markdown("### 📂 ඔබගේ Apps")
-    
     apps_data = supabase.table("generated_apps").select("*").eq("owner_id", st.session_state.user.id).order("created_at", desc=True).execute()
     
     if apps_data.data:
@@ -183,7 +176,6 @@ def render_generator_dashboard():
             with st.expander(f"📦 {app['app_name']} - Status: {app['status'].upper()}"):
                 st.write(f"**Source:** {app['source_link']}")
                 st.write(f"**Visibility:** {'Public' if app['is_visible'] else 'Private'}")
-                
                 if app['status'] == 'pending':
                     st.info("⏳ පෝලිමේ ඇත...")
                 elif app['status'] == 'processing':
@@ -198,6 +190,79 @@ def render_generator_dashboard():
                     st.rerun()
     else:
         st.info("ඔබ තවම කිසිදු ඇප් එකක් සාදා නැත.")
+
+# --- UI: UPGRADE PACKAGE (USER) ---
+def render_upgrade_section():
+    st.markdown("### 💳 Upgrade Your Package")
+    st.write("ඔබගේ ව්‍යාපාරය දියුණු කරගැනීම සඳහා වඩාත් සුදුසු පැකේජයක් තෝරන්න.")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.info("**🥈 Silver Package**\n\n- Apps 10ක් සෑදිය හැක.\n- Price: Rs. 2,500")
+    with col2:
+        st.warning("**🥇 Gold Package**\n\n- අසීමිත Apps (Unlimited).\n- Price: Rs. 5,000")
+        
+    st.markdown("---")
+    with st.form("payment_form"):
+        selected_pkg = st.selectbox("මිලදී ගැනීමට අවශ්‍ය පැකේජය තෝරන්න:", ["silver", "gold"])
+        slip_file = st.file_uploader("ඔබ මුදල් ගෙවූ Slip එක Upload කරන්න (Image/PDF)", type=['jpg', 'jpeg', 'png', 'pdf'])
+        
+        submitted = st.form_submit_button("Submit Payment", use_container_width=True)
+        if submitted:
+            if slip_file:
+                with st.spinner("Uploading Slip..."):
+                    file_path = f"{st.session_state.user.id}/{int(time.time())}_{slip_file.name}"
+                    file_bytes = slip_file.getvalue()
+                    # Upload to payment_slips bucket
+                    supabase.storage.from_("payment_slips").upload(file_path, file_bytes)
+                    slip_url = supabase.storage.from_("payment_slips").get_public_url(file_path)
+                    
+                    # Insert to payments table
+                    supabase.table("payments").insert({
+                        "user_id": st.session_state.user.id,
+                        "package_name": selected_pkg,
+                        "slip_url": slip_url,
+                        "status": "pending"
+                    }).execute()
+                    
+                st.success("✅ ඔබගේ ගෙවීම සාර්ථකව ඉදිරිපත් කරන ලදී. Admin විසින් එය අනුමත කළ පසු පැකේජය යාවත්කාලීන වනු ඇත.")
+            else:
+                st.error("කරුණාකර Slip එක Upload කරන්න.")
+
+# --- UI: PAYMENT APPROVALS (OWNER/ADMIN) ---
+def render_payment_approvals():
+    st.markdown("### 💰 Pending Payment Approvals")
+    
+    # Get pending payments with user emails
+    # Since we can't easily join auth.users in standard supabase client query easily, we will fetch payments
+    payments_res = supabase.table("payments").select("*").eq("status", "pending").execute()
+    
+    if not payments_res.data:
+        st.info("දැනට අනුමත කිරීමට කිසිදු ගෙවීමක් නොමැත.")
+        return
+        
+    for pay in payments_res.data:
+        with st.expander(f"Payment ID: #{pay['id']} - Request: {pay['package_name'].upper()}"):
+            st.write(f"**User ID:** {pay['user_id']}")
+            st.write(f"**Requested Package:** {pay['package_name'].upper()}")
+            st.markdown(f"**Slip:** [Click here to view Slip]({pay['slip_url']})")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("✅ Approve", key=f"app_{pay['id']}", type="primary", use_container_width=True):
+                    # 1. Update payment status
+                    supabase.table("payments").update({"status": "approved"}).eq("id", pay['id']).execute()
+                    # 2. Upgrade the user's package!
+                    supabase.table("users").update({"package": pay['package_name']}).eq("id", pay['user_id']).execute()
+                    st.success("Approved successfully!")
+                    time.sleep(1)
+                    st.rerun()
+            with col2:
+                if st.button("❌ Reject", key=f"rej_{pay['id']}", use_container_width=True):
+                    supabase.table("payments").update({"status": "rejected"}).eq("id", pay['id']).execute()
+                    st.error("Payment Rejected.")
+                    time.sleep(1)
+                    st.rerun()
 
 # ==========================================
 #               MAIN UI LOGIC
@@ -235,32 +300,38 @@ if not st.session_state.user:
 
 else:
     st.sidebar.title(f"Hi, {st.session_state.user.email}")
-    st.sidebar.info(f"🔑 Role: **{st.session_state.role.upper()}**")
+    st.sidebar.info(f"🔑 Role: **{st.session_state.role.upper()}**\n\n📦 Pkg: **{st.session_state.package.upper()}**")
     
     if st.sidebar.button("Logout", type="primary"):
         supabase.auth.sign_out()
         st.session_state.user = None
         st.session_state.role = None
+        st.session_state.package = 'free'
         st.rerun()
 
+    # --- ROUTING ---
     if st.session_state.role == 'owner':
         st.title("👑 Owner Dashboard (Total Control)")
-        tab1, tab2, tab3 = st.tabs(["🚀 App Generator", "👥 User Management", "⚙️ System Settings"])
+        tab1, tab2, tab3 = st.tabs(["🚀 App Generator", "💰 Payment Approvals", "⚙️ System Settings"])
         with tab1:
             render_generator_dashboard()
         with tab2:
-            st.info("User Management (Payment/Logs) පසුව එකතු කෙරේ.")
+            render_payment_approvals()
         with tab3:
             st.info("System Settings පසුව එකතු කෙරේ.")
             
     elif st.session_state.role == 'admin':
         st.title("🛡️ Admin Dashboard")
-        render_generator_dashboard()
+        tab1, tab2 = st.tabs(["🚀 App Generator", "💰 Payment Approvals"])
+        with tab1:
+            render_generator_dashboard()
+        with tab2:
+            render_payment_approvals()
         
-    elif st.session_state.role == 'moderator':
-        st.title("👁️ Moderator Dashboard")
-        st.info("Support Tickets සහ User Warnings මෙතැනින්.")
-        
-    elif st.session_state.role == 'user':
-        st.title("🚀 App Generator Dashboard")
-        render_generator_dashboard()
+    elif st.session_state.role in ['user', 'moderator']:
+        st.title("🚀 User Dashboard")
+        tab1, tab2 = st.tabs(["🚀 App Generator", "💳 Upgrade Package"])
+        with tab1:
+            render_generator_dashboard()
+        with tab2:
+            render_upgrade_section()
