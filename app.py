@@ -7,7 +7,7 @@ import time
 import random
 from datetime import datetime, timedelta, timezone
 import groq
-import google.generativeai as genai
+from google import genai 
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="AI App Factory - Master Core", layout="wide")
@@ -30,6 +30,8 @@ if 'device_id' not in st.session_state:
     st.session_state.device_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, socket.gethostname()))
 if 'show_toast' not in st.session_state:
     st.session_state.show_toast = True
+if 'worker_started' not in st.session_state:
+    st.session_state.worker_started = False
 
 # --- HELPER FUNCTIONS ---
 def get_user_ip():
@@ -38,7 +40,6 @@ def get_user_ip():
     except:
         return "Unknown IP"
 
-# --- MARKETING NOTIFICATIONS (SOCIAL PROOF) ---
 def trigger_social_proof():
     if st.session_state.show_toast:
         messages = [
@@ -50,7 +51,68 @@ def trigger_social_proof():
         st.toast(random.choice(messages), icon="🔔")
         st.session_state.show_toast = False 
 
-# --- AUTHENTICATION & AUTO-EXPIRE ENGINE ---
+# --- AI GENERATOR ENGINE (BULLETPROOF WORKER) ---
+def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_key):
+    db = create_client(supa_url, supa_key)
+    app_id = app_data['id']
+    
+    try:
+        db.table("generated_apps").update({"status": "processing"}).eq("id", app_id).execute()
+        
+        prompt = f"""
+        You are an expert Python Streamlit developer. Create a complete, working Streamlit application.
+        App Name: {app_data['app_name']}
+        Data/Source Reference: {app_data['source_link']}
+        
+        Requirements:
+        1. Use visually appealing Streamlit UI components (columns, expanders, colored text).
+        2. Ensure the code is error-free.
+        3. ONLY output the python code. Do not include markdown formatting like ```python or any explanations.
+        """
+        
+        generated_code = ""
+
+        if app_data.get('selected_model') == 'gemini':
+            client = genai.Client(api_key=gemini_key)
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=prompt,
+            )
+            generated_code = response.text
+        else:
+            client = groq.Groq(api_key=groq_key)
+            chat_completion = client.chat.completions.create(
+                messages=[{"role": "user", "content": prompt}],
+                model="llama3-70b-8192", 
+            )
+            generated_code = chat_completion.choices[0].message.content
+            
+        generated_code = generated_code.replace("```python", "").replace("```", "").strip()
+        db.table("generated_apps").update({"status": "completed", "app_code": generated_code}).eq("id", app_id).execute()
+        
+    except Exception as e:
+        db.table("generated_apps").update({"status": "failed"}).eq("id", app_id).execute()
+        print(f"Worker Error on {app_id}: {e}")
+
+def background_recovery_worker():
+    """මෙය Streamlit Restart වුණත් Pending ඒවා හොයාගෙන හදන Worker එකයි"""
+    try:
+        groq_key = st.secrets.get("GROQ_API_KEY", "")
+        gemini_key = st.secrets.get("GEMINI_API_KEY", "")
+        db = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
+        
+        pending_apps = db.table("generated_apps").select("*").eq("status", "pending").execute()
+        
+        for app in pending_apps.data:
+            process_single_app(app, groq_key, gemini_key, st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
+    except Exception as e:
+        print(f"Recovery Worker Failed: {e}")
+
+if not st.session_state.worker_started:
+    threading.Thread(target=background_recovery_worker, daemon=True).start()
+    st.session_state.worker_started = True
+
+# --- AUTH & AUTO-EXPIRE ENGINE ---
 def login(email, password):
     try:
         res = supabase.auth.sign_in_with_password({"email": email, "password": password})
@@ -109,55 +171,6 @@ def register(email, password):
     except Exception as e:
         st.error(f"Error: {e}")
 
-# --- AI BACKGROUND TASK ENGINE (The Magic is Here) ---
-def generate_app_background(app_id, app_name, final_source_link, selected_ai_model, groq_key, gemini_key, supa_url, supa_key):
-    try:
-        # 🪄 MAGIC: අලුත් Thread එකට අලුත්ම Database Connection එකක් හදා දීම
-        local_supabase: Client = create_client(supa_url, supa_key)
-        
-        local_supabase.table("generated_apps").update({"status": "processing"}).eq("id", app_id).execute()
-        
-        prompt = f"""
-        You are an expert Python Streamlit developer. Create a complete, working Streamlit application.
-        App Name: {app_name}
-        Data/Source Reference: {final_source_link}
-        
-        Requirements:
-        1. Use visually appealing Streamlit UI components (columns, expanders, colored text).
-        2. Ensure the code is error-free.
-        3. ONLY output the python code. Do not include markdown formatting like ```python or any explanations.
-        """
-        
-        generated_code = ""
-
-        if selected_ai_model == 'gemini':
-            genai.configure(api_key=gemini_key)
-            model = genai.GenerativeModel('gemini-1.5-pro')
-            response = model.generate_content(prompt)
-            generated_code = response.text
-        else:
-            client = groq.Groq(api_key=groq_key)
-            chat_completion = client.chat.completions.create(
-                messages=[{"role": "user", "content": prompt}],
-                model="llama3-70b-8192", 
-            )
-            generated_code = chat_completion.choices[0].message.content
-
-        # Cleaning Magic
-        if "```python" in generated_code:
-            generated_code = generated_code.split("```python")[1]
-        if "```" in generated_code:
-            generated_code = generated_code.split("```")[0]
-            
-        generated_code = generated_code.strip()
-
-        local_supabase.table("generated_apps").update({"status": "completed", "app_code": generated_code}).eq("id", app_id).execute()
-    except Exception as e:
-        # දෝෂයක් ආවොත් Database එකට Failed කියලා යවනවා
-        local_supabase = create_client(supa_url, supa_key)
-        local_supabase.table("generated_apps").update({"status": "failed"}).eq("id", app_id).execute()
-        print(f"AI Generation Error: {e}")
-
 # --- UI: APP GENERATOR DASHBOARD ---
 def render_generator_dashboard():
     trigger_social_proof()
@@ -206,15 +219,22 @@ def render_generator_dashboard():
                     supabase.storage.from_("app_sources").upload(file_path, uploaded_file.getvalue())
                     final_source_link = supabase.storage.from_("app_sources").get_public_url(file_path)
 
-            res = supabase.table("generated_apps").insert({"owner_id": st.session_state.user.id, "app_name": app_name, "source_link": final_source_link, "is_visible": not is_private, "status": "pending"}).execute()
+            res = supabase.table("generated_apps").insert({
+                "owner_id": st.session_state.user.id, 
+                "app_name": app_name, 
+                "source_link": final_source_link, 
+                "is_visible": not is_private, 
+                "status": "pending",
+                "selected_model": selected_model
+            }).execute()
+            
             if res.data:
-                # 🪄 MAGIC: Supabase යතුරු දෙකත් Thread එකට පාස් කරනවා
                 groq_key = st.secrets.get("GROQ_API_KEY", "")
                 gemini_key = st.secrets.get("GEMINI_API_KEY", "")
-                supa_url = st.secrets["SUPABASE_URL"]
-                supa_key = st.secrets["SUPABASE_KEY"]
-                threading.Thread(target=generate_app_background, args=(res.data[0]['id'], app_name, final_source_link, selected_model, groq_key, gemini_key, supa_url, supa_key)).start()
-                st.success(f"✅ ඔබගේ ඇප් එක {selected_model.upper()} AI මගින් සාදමින් පවතී! පහත ලැයිස්තුවෙන් තත්ත්වය බලාගන්න.")
+                threading.Thread(target=process_single_app, args=(res.data[0], groq_key, gemini_key, st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"]), daemon=True).start()
+                st.success(f"✅ ඔබගේ ඇප් එක {selected_model.upper()} AI මගින් පෝලිමට එක් කරන ලදී! පසුව පැමිණ තත්ත්වය පරීක්ෂා කරන්න.")
+                time.sleep(2)
+                st.rerun()
         else:
             st.error("කරුණාකර නම සහ ලින්ක් එක / File එක ලබා දෙන්න.")
 
@@ -225,14 +245,14 @@ def render_generator_dashboard():
         for app in apps_data.data:
             with st.expander(f"📦 {app['app_name']} - Status: {app['status'].upper()}"):
                 st.write(f"**Source:** {app['source_link']}")
-                st.write(f"**Visibility:** {'Public' if app['is_visible'] else 'Private'}")
+                st.write(f"**Visibility:** {'Public' if app.get('is_visible', True) else 'Private'}")
                 if app['status'] == 'pending':
                     st.info("⏳ පෝලිමේ ඇත...")
                 elif app['status'] == 'processing':
                     st.warning("⚙️ AI එක මගින් කේතය ලියමින් පවතී... (කරුණාකර මඳ වේලාවකින් Refresh කරන්න)")
                 elif app['status'] == 'completed':
                     st.success("✅ සාර්ථකයි! පහතින් කේතය බලාගන්න.")
-                    st.code(app['app_code'], language='python')
+                    st.code(app.get('app_code', ''), language='python')
                 elif app['status'] == 'failed':
                     st.error("❌ දෝෂයකි. කරුණාකර නැවත උත්සාහ කරන්න.")
                 
