@@ -66,7 +66,6 @@ def login(email, password):
             current_pkg = user_data.data[0].get('package', 'free')
             expires_str = user_data.data[0].get('expires_at')
             
-            # --- AUTO EXPIRE LOGIC ---
             if current_pkg != 'free' and expires_str:
                 expire_date = datetime.fromisoformat(expires_str.replace('Z', '+00:00'))
                 current_date = datetime.now(timezone.utc)
@@ -110,10 +109,13 @@ def register(email, password):
     except Exception as e:
         st.error(f"Error: {e}")
 
-# --- AI BACKGROUND TASK ENGINE ---
-def generate_app_background(app_id, app_name, final_source_link, selected_ai_model, groq_key, gemini_key):
+# --- AI BACKGROUND TASK ENGINE (The Magic is Here) ---
+def generate_app_background(app_id, app_name, final_source_link, selected_ai_model, groq_key, gemini_key, supa_url, supa_key):
     try:
-        supabase.table("generated_apps").update({"status": "processing"}).eq("id", app_id).execute()
+        # 🪄 MAGIC: අලුත් Thread එකට අලුත්ම Database Connection එකක් හදා දීම
+        local_supabase: Client = create_client(supa_url, supa_key)
+        
+        local_supabase.table("generated_apps").update({"status": "processing"}).eq("id", app_id).execute()
         
         prompt = f"""
         You are an expert Python Streamlit developer. Create a complete, working Streamlit application.
@@ -128,7 +130,6 @@ def generate_app_background(app_id, app_name, final_source_link, selected_ai_mod
         
         generated_code = ""
 
-        # තෝරාගත් AI මොඩලය මත පදනම්ව කේතය ලියවීම
         if selected_ai_model == 'gemini':
             genai.configure(api_key=gemini_key)
             model = genai.GenerativeModel('gemini-1.5-pro')
@@ -142,7 +143,7 @@ def generate_app_background(app_id, app_name, final_source_link, selected_ai_mod
             )
             generated_code = chat_completion.choices[0].message.content
 
-        # Markdown කෑලි සුද්ද කිරීම (Cleaning Magic)
+        # Cleaning Magic
         if "```python" in generated_code:
             generated_code = generated_code.split("```python")[1]
         if "```" in generated_code:
@@ -150,9 +151,11 @@ def generate_app_background(app_id, app_name, final_source_link, selected_ai_mod
             
         generated_code = generated_code.strip()
 
-        supabase.table("generated_apps").update({"status": "completed", "app_code": generated_code}).eq("id", app_id).execute()
+        local_supabase.table("generated_apps").update({"status": "completed", "app_code": generated_code}).eq("id", app_id).execute()
     except Exception as e:
-        supabase.table("generated_apps").update({"status": "failed"}).eq("id", app_id).execute()
+        # දෝෂයක් ආවොත් Database එකට Failed කියලා යවනවා
+        local_supabase = create_client(supa_url, supa_key)
+        local_supabase.table("generated_apps").update({"status": "failed"}).eq("id", app_id).execute()
         print(f"AI Generation Error: {e}")
 
 # --- UI: APP GENERATOR DASHBOARD ---
@@ -205,10 +208,12 @@ def render_generator_dashboard():
 
             res = supabase.table("generated_apps").insert({"owner_id": st.session_state.user.id, "app_name": app_name, "source_link": final_source_link, "is_visible": not is_private, "status": "pending"}).execute()
             if res.data:
-                # මෙතනදි API keys දෙක Thread එකට පාස් කරනවා
+                # 🪄 MAGIC: Supabase යතුරු දෙකත් Thread එකට පාස් කරනවා
                 groq_key = st.secrets.get("GROQ_API_KEY", "")
                 gemini_key = st.secrets.get("GEMINI_API_KEY", "")
-                threading.Thread(target=generate_app_background, args=(res.data[0]['id'], app_name, final_source_link, selected_model, groq_key, gemini_key)).start()
+                supa_url = st.secrets["SUPABASE_URL"]
+                supa_key = st.secrets["SUPABASE_KEY"]
+                threading.Thread(target=generate_app_background, args=(res.data[0]['id'], app_name, final_source_link, selected_model, groq_key, gemini_key, supa_url, supa_key)).start()
                 st.success(f"✅ ඔබගේ ඇප් එක {selected_model.upper()} AI මගින් සාදමින් පවතී! පහත ලැයිස්තුවෙන් තත්ත්වය බලාගන්න.")
         else:
             st.error("කරුණාකර නම සහ ලින්ක් එක / File එක ලබා දෙන්න.")
