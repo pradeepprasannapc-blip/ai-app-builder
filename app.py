@@ -64,12 +64,11 @@ def login(email, password):
             current_pkg = user_data.data[0].get('package', 'free')
             expires_str = user_data.data[0].get('expires_at')
             
-            # --- AUTO EXPIRE LOGIC (කාලය ඉවර වුණාම ඉබේම Free වෙන කොටස) ---
+            # --- AUTO EXPIRE LOGIC ---
             if current_pkg != 'free' and expires_str:
                 expire_date = datetime.fromisoformat(expires_str.replace('Z', '+00:00'))
                 current_date = datetime.now(timezone.utc)
                 if current_date > expire_date:
-                    # කාලය පැනලා නම් Free කරනවා
                     supabase.table("users").update({"package": "free", "expires_at": None}).eq("id", user_id).execute()
                     current_pkg = 'free'
                     expires_str = None
@@ -202,7 +201,13 @@ def render_generator_dashboard():
 # --- UI: UPGRADE PACKAGE (SMART OFFERS) ---
 def render_upgrade_section():
     trigger_social_proof()
-    st.markdown("### 💳 Upgrade Your Package (දින 30ක් සඳහා)")
+    st.markdown("### 💳 Upgrade Your Package")
+    
+    if st.session_state.package != 'free' and st.session_state.expires_at:
+        exp_dt = datetime.fromisoformat(st.session_state.expires_at.replace('Z', '+00:00'))
+        st.info(f"ℹ️ ඔබගේ වර්තමාන **{st.session_state.package.upper()}** පැකේජය **{exp_dt.strftime('%Y-%m-%d')}** දිනෙන් අවසන් වේ.")
+        
+    st.write("පහත පැකේජයන් සියල්ලම **දින 30ක (මාස 1ක)** වලංගු කාලයක් සඳහා ලබා දේ.")
     
     settings_res = supabase.table("system_settings").select("setting_value").eq("setting_key", "pricing").execute()
     pricing = settings_res.data[0]['setting_value'] if settings_res.data else {"silver_price": 2500, "silver_discount_pct": 20, "gold_price": 5000, "gold_discount_pct": 30}
@@ -215,14 +220,13 @@ def render_upgrade_section():
     
     col1, col2 = st.columns(2)
     with col1:
-        st.info(f"**🥈 Silver Package**\n\n- Apps 10ක් සෑදිය හැක.\n- Price: ~~Rs. {silver_orig}~~ **Rs. {pricing['silver_price']}**\n- 💸 ඔබ රු. {silver_save} ක් ඉතිරි කරයි! ({pricing['silver_discount_pct']}% OFF)")
+        st.info(f"**🥈 Silver Package**\n\n- Apps 10ක් සෑදිය හැක.\n- ⏳ **වලංගු කාලය: දින 30යි**\n- Price: ~~Rs. {silver_orig}~~ **Rs. {pricing['silver_price']}**\n- 💸 ඔබ රු. {silver_save} ක් ඉතිරි කරයි! ({pricing['silver_discount_pct']}% OFF)")
     with col2:
-        st.warning(f"**🥇 Gold Package**\n\n- අසීමිත Apps.\n- Price: ~~Rs. {gold_orig}~~ **Rs. {pricing['gold_price']}**\n- 💸 ඔබ රු. {gold_save} ක් ඉතිරි කරයි! ({pricing['gold_discount_pct']}% OFF)")
+        st.warning(f"**🥇 Gold Package**\n\n- අසීමිත Apps.\n- ⏳ **වලංගු කාලය: දින 30යි**\n- Price: ~~Rs. {gold_orig}~~ **Rs. {pricing['gold_price']}**\n- 💸 ඔබ රු. {gold_save} ක් ඉතිරි කරයි! ({pricing['gold_discount_pct']}% OFF)")
         
     st.markdown("---")
     with st.form("payment_form"):
         selected_pkg = st.selectbox("පැකේජය තෝරන්න (මාස 1ක වලංගු කාලයක් සහිතයි):", ["silver", "gold"])
-        # යූසර්ට කාලය තෝරන්න දෙන කොටස සම්පූර්ණයෙන්ම ඉවත් කළා.
         slip_file = st.file_uploader("Slip එක Upload කරන්න (Image/PDF)", type=['jpg', 'jpeg', 'png', 'pdf'])
         
         if st.form_submit_button("Submit Payment", use_container_width=True):
@@ -236,7 +240,7 @@ def render_upgrade_section():
                         "user_id": st.session_state.user.id, 
                         "package_name": selected_pkg, 
                         "slip_url": slip_url, 
-                        "duration_days": 30, # Payment එකක් කළොත් අනිවාර්යයෙන් දවස් 30යි (මාසෙයි).
+                        "duration_days": 30, # Payment එකක් කළොත් අනිවාර්යයෙන් දවස් 30යි
                         "status": "pending"
                     }).execute()
                 st.success("✅ ඔබගේ ගෙවීම සාර්ථකව යවන ලදී. Admin විසින් අනුමත කළ පසු යාවත්කාලීන වනු ඇත.")
@@ -272,7 +276,6 @@ def render_god_mode():
                         st.rerun()
                 
                 with col2:
-                    # Admin ට විතරක් ඕනෑම දවස් ගාණක් බෝනස් විදිහට දෙන්න පුළුවන්.
                     bonus_days = st.number_input("Add Bonus Days:", min_value=1, max_value=365, value=7, key=f"days_{u['id']}")
                     if st.button("🎁 Give Bonus Days", key=f"btn_bns_{u['id']}"):
                         if u['expires_at']:
