@@ -4,6 +4,8 @@ import socket
 import uuid
 import threading
 import time
+import random
+from datetime import datetime, timedelta, timezone
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="AI App Factory - Master Core", layout="wide")
@@ -20,248 +22,252 @@ if 'role' not in st.session_state:
     st.session_state.role = None
 if 'package' not in st.session_state:
     st.session_state.package = 'free'
+if 'expires_at' not in st.session_state:
+    st.session_state.expires_at = None
 if 'device_id' not in st.session_state:
     st.session_state.device_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, socket.gethostname()))
+if 'show_toast' not in st.session_state:
+    st.session_state.show_toast = True
 
 # --- HELPER FUNCTIONS ---
 def get_user_ip():
     try:
-        hostname = socket.gethostname()
-        ip_address = socket.gethostbyname(hostname)
-        return ip_address
+        return socket.gethostbyname(socket.gethostname())
     except:
         return "Unknown IP"
 
-# --- AUTHENTICATION FUNCTIONS ---
-def register(email, password):
-    try:
-        res = supabase.auth.sign_up({"email": email, "password": password})
-        if res.user:
-            st.success("🎉 ලියාපදිංචිය සාර්ථකයි! කරුණාකර ඔබගේ Email එකට ගොස් ගිණුම Verify කරන්න.")
-            supabase.table("device_logs").insert({
-                "user_id": res.user.id,
-                "device_id": st.session_state.device_id,
-                "ip_address": get_user_ip(),
-                "country": "Sri Lanka"
-            }).execute()
-        else:
-            st.error("ලියාපදිංචි වීමේ දෝෂයකි.")
-    except Exception as e:
-        if "User already registered" in str(e):
-            st.warning("මෙම Email ලිපිනය දැනටමත් ලියාපදිංචි කර ඇත.")
-        else:
-            st.error(f"Error: {e}")
+# --- MARKETING NOTIFICATIONS (SOCIAL PROOF) ---
+def trigger_social_proof():
+    if st.session_state.show_toast:
+        messages = [
+            "🔥 අද දින 50+ දෙනෙක් සාර්ථකව Apps සාදා ඇත!",
+            "🎉 කොළඹින් අලුත් පරිශීලකයෙක් Gold පැකේජය ලබා ගත්තා!",
+            "🚀 මේ මොහොතේත් සිස්ටම් එකේ Apps 12ක් හැදෙමින් පවතී...",
+            "💡 Silver පැකේජයේ අද දවසේ විශේෂ 20% ක වට්ටමක්!"
+        ]
+        st.toast(random.choice(messages), icon="🔔")
+        st.session_state.show_toast = False # එක පාරක් විතරක් පෙන්වන්න
 
+# --- AUTHENTICATION & AUTO-EXPIRE ENGINE ---
 def login(email, password):
     try:
         res = supabase.auth.sign_in_with_password({"email": email, "password": password})
         user_id = res.user.id
         
-        # මෙතනදි අපි 'package' එකත් අරගන්නවා
-        user_data = supabase.table("users").select("role, status, package").eq("id", user_id).execute()
+        user_data = supabase.table("users").select("role, status, package, expires_at").eq("id", user_id).execute()
         
         if user_data.data:
             if user_data.data[0]['status'] == 'banned':
                 st.error("🚫 ඔබේ ගිණුම තහනම් කර ඇත!")
                 return
                 
+            current_pkg = user_data.data[0].get('package', 'free')
+            expires_str = user_data.data[0].get('expires_at')
+            
+            # --- AUTO EXPIRE LOGIC ---
+            if current_pkg != 'free' and expires_str:
+                expire_date = datetime.fromisoformat(expires_str.replace('Z', '+00:00'))
+                current_date = datetime.now(timezone.utc)
+                if current_date > expire_date:
+                    supabase.table("users").update({"package": "free", "expires_at": None}).eq("id", user_id).execute()
+                    current_pkg = 'free'
+                    expires_str = None
+                    st.warning("⚠️ ඔබගේ පැකේජයේ කාල සීමාව අවසන් වී ඇති බැවින්, ගිණුම FREE පැකේජයට මාරු කර ඇත.")
+                    time.sleep(2)
+
             st.session_state.user = res.user
             st.session_state.role = user_data.data[0]['role']
-            st.session_state.package = user_data.data[0].get('package', 'free') # Default to free if null
+            st.session_state.package = current_pkg
+            st.session_state.expires_at = expires_str
+            st.session_state.show_toast = True # Reset toast for new login
             
-            st.success(f"සාර්ථකයි! {st.session_state.role.upper()} ලෙස ලොග් විය.")
-            
-            supabase.table("device_logs").insert({
-                "user_id": user_id,
-                "device_id": st.session_state.device_id,
-                "ip_address": get_user_ip(),
-                "country": "Sri Lanka"
-            }).execute()
-            
+            if current_pkg != 'free':
+                st.success(f"සාර්ථකයි! {st.session_state.role.upper()} ලෙස ලොග් විය.")
             st.rerun()
     except Exception as e:
-        error_msg = str(e)
-        if "Email not confirmed" in error_msg:
-            st.warning("⚠️ කරුණාකර ඔබේ Email ගිණුමට ගොස් අපි එවූ ලින්ක් එක Click කර ගිණුම Verify කරන්න.")
-        elif "Invalid login credentials" in error_msg:
+        if "Invalid login credentials" in str(e):
             st.error("⚠️ Email හෝ Password වැරදියි.")
         else:
-            st.error(f"⚠️ දෝෂයකි: {error_msg}")
+            st.error(f"⚠️ දෝෂයකි: {str(e)}")
+
+def register(email, password):
+    try:
+        res = supabase.auth.sign_up({"email": email, "password": password})
+        if res.user:
+            st.success("🎉 ලියාපදිංචිය සාර්ථකයි! කරුණාකර ඔබගේ Email එකට ගොස් ගිණුම Verify කරන්න.")
+        else:
+            st.error("ලියාපදිංචි වීමේ දෝෂයකි.")
+    except Exception as e:
+        st.error(f"Error: {e}")
 
 # --- BACKGROUND TASK ENGINE ---
 def generate_app_background(app_id, final_source_link):
     try:
         supabase.table("generated_apps").update({"status": "processing"}).eq("id", app_id).execute()
-        time.sleep(30) 
-        generated_code = f"""# AI Generated App
-# Source Data: {final_source_link}
-import streamlit as st
-
-st.set_page_config(page_title="Generated App")
-st.title("My Awesome Generated App")
-st.write("This app was created by AI App Factory!")
-st.success("Successfully built from source!")
-"""
+        time.sleep(10) # 10s for quick testing
+        generated_code = f"""# AI Generated App from: {final_source_link}\nimport streamlit as st\nst.title("My AI App")"""
         supabase.table("generated_apps").update({"status": "completed", "app_code": generated_code}).eq("id", app_id).execute()
     except Exception as e:
         supabase.table("generated_apps").update({"status": "failed"}).eq("id", app_id).execute()
 
 # --- UI: APP GENERATOR DASHBOARD ---
 def render_generator_dashboard():
+    trigger_social_proof() # Show social proof notification
+    
     st.markdown("### 🛠️ App Generation Engine")
     
-    # --- Package Limit Check ---
     res_count = supabase.table("generated_apps").select("id", count="exact").eq("owner_id", st.session_state.user.id).execute()
     app_count = res_count.count if res_count.count else 0
-    
     max_apps = 1 if st.session_state.package == 'free' else (10 if st.session_state.package == 'silver' else 9999)
     
-    st.info(f"ඔබගේ පැකේජය: **{st.session_state.package.upper()}** | සාදා ඇති Apps: **{app_count}/{'Unlimited' if max_apps == 9999 else max_apps}**")
+    expiry_text = ""
+    if st.session_state.package != 'free' and st.session_state.expires_at:
+        exp_dt = datetime.fromisoformat(st.session_state.expires_at.replace('Z', '+00:00'))
+        expiry_text = f" | ⏳ වලංගු දිනය: {exp_dt.strftime('%Y-%m-%d')}"
+        
+    st.info(f"📦 පැකේජය: **{st.session_state.package.upper()}**{expiry_text} | Apps: **{app_count}/{'Unlimited' if max_apps == 9999 else max_apps}**")
     
     if app_count >= max_apps:
-        st.error("⚠️ ඔබගේ පැකේජයේ උපරිම සීමාවට පැමිණ ඇත. තවත් Apps සෑදීමට කරුණාකර ඔබගේ පැකේජය Upgrade කරන්න.")
-        return # Form එක පෙන්වන්නේ නෑ
-    # ---------------------------
+        st.error("⚠️ උපරිම සීමාවට පැමිණ ඇත. තවත් Apps සෑදීමට කරුණාකර Upgrade කරන්න.")
+        return 
 
     app_name = st.text_input("App එකේ නම", placeholder="Ex: My E-commerce App")
-    upload_option = st.radio("Source එක ලබා දෙන ආකාරය තෝරන්න:", ["🔗 Link එකක් ලබා දීම", "📁 File එකක් Upload කිරීම"], horizontal=True)
+    upload_option = st.radio("Source එක:", ["🔗 Link එකක් ලබා දීම", "📁 File එකක් Upload කිරීම"], horizontal=True)
     
     source_link = ""
     uploaded_file = None
-    
     if upload_option == "🔗 Link එකක් ලබා දීම":
-        source_link = st.text_input("Zip File එකේ හෝ Repo එකේ ලින්ක් එක", placeholder="https://github.com/... හෝ GDrive Link")
+        source_link = st.text_input("ලින්ක් එක")
     else:
-        uploaded_file = st.file_uploader("ඔබගේ File එක තෝරන්න (Zip, Py, Txt)", type=['zip', 'txt', 'py'])
+        uploaded_file = st.file_uploader("File එක තෝරන්න", type=['zip', 'txt', 'py'])
         
-    is_private = st.checkbox("මේ ඇප් එක හංගලා තියන්න (Private)", value=False)
-    
     if st.button("🚀 Generate App", use_container_width=True, type="primary"):
         if app_name and (source_link or uploaded_file):
-            final_source_link = ""
-            
+            final_source_link = source_link
             if upload_option == "📁 File එකක් Upload කිරීම" and uploaded_file:
-                with st.spinner("☁️ File එක Cloud එකට Upload වෙමින් පවතී..."):
+                with st.spinner("☁️ Uploading..."):
                     file_path = f"{st.session_state.user.id}/{int(time.time())}_{uploaded_file.name}"
-                    file_bytes = uploaded_file.getvalue()
-                    supabase.storage.from_("app_sources").upload(file_path, file_bytes)
+                    supabase.storage.from_("app_sources").upload(file_path, uploaded_file.getvalue())
                     final_source_link = supabase.storage.from_("app_sources").get_public_url(file_path)
-            else:
-                final_source_link = source_link
 
-            res = supabase.table("generated_apps").insert({
-                "owner_id": st.session_state.user.id,
-                "app_name": app_name,
-                "source_link": final_source_link,
-                "is_visible": not is_private,
-                "status": "pending"
-            }).execute()
-            
+            res = supabase.table("generated_apps").insert({"owner_id": st.session_state.user.id, "app_name": app_name, "source_link": final_source_link, "status": "pending"}).execute()
             if res.data:
-                app_id = res.data[0]['id']
-                thread = threading.Thread(target=generate_app_background, args=(app_id, final_source_link))
-                thread.start()
-                st.success("✅ ඔබගේ ඇප් එක සාදමින් පවතී! පහත ලැයිස්තුවෙන් තත්ත්වය බලාගන්න.")
-            else:
-                st.error("Database Error: පද්ධතියේ දෝෂයක් ඇති විය.")
+                threading.Thread(target=generate_app_background, args=(res.data[0]['id'], final_source_link)).start()
+                st.success("✅ සාදමින් පවතී!")
         else:
-            st.error("කරුණාකර නම සහ ලින්ක් එක / File එක ලබා දෙන්න.")
+            st.error("දත්ත ලබා දෙන්න.")
 
     st.markdown("---")
     st.markdown("### 📂 ඔබගේ Apps")
     apps_data = supabase.table("generated_apps").select("*").eq("owner_id", st.session_state.user.id).order("created_at", desc=True).execute()
-    
     if apps_data.data:
         for app in apps_data.data:
             with st.expander(f"📦 {app['app_name']} - Status: {app['status'].upper()}"):
-                st.write(f"**Source:** {app['source_link']}")
-                st.write(f"**Visibility:** {'Public' if app['is_visible'] else 'Private'}")
-                if app['status'] == 'pending':
-                    st.info("⏳ පෝලිමේ ඇත...")
-                elif app['status'] == 'processing':
-                    st.warning("⚙️ AI එක මගින් කේතය ලියමින් පවතී... (කරුණාකර මඳ වේලාවකින් Refresh කරන්න)")
-                elif app['status'] == 'completed':
-                    st.success("✅ සාර්ථකයි! පහතින් කේතය බලාගන්න.")
+                if app['status'] == 'completed':
                     st.code(app['app_code'], language='python')
-                elif app['status'] == 'failed':
-                    st.error("❌ දෝෂයකි. කරුණාකර නැවත උත්සාහ කරන්න.")
-                
-                if st.button("🔄 Refresh Status", key=f"ref_{app['id']}"):
+                else:
+                    st.write("Status:", app['status'])
+                if st.button("🔄 Refresh", key=f"ref_{app['id']}"):
                     st.rerun()
-    else:
-        st.info("ඔබ තවම කිසිදු ඇප් එකක් සාදා නැත.")
 
-# --- UI: UPGRADE PACKAGE (USER) ---
+# --- UI: UPGRADE PACKAGE (SMART OFFERS) ---
 def render_upgrade_section():
+    trigger_social_proof()
     st.markdown("### 💳 Upgrade Your Package")
-    st.write("ඔබගේ ව්‍යාපාරය දියුණු කරගැනීම සඳහා වඩාත් සුදුසු පැකේජයක් තෝරන්න.")
+    
+    # DB එකෙන් මිල ගණන් ගන්නවා
+    settings_res = supabase.table("system_settings").select("setting_value").eq("setting_key", "pricing").execute()
+    pricing = settings_res.data[0]['setting_value'] if settings_res.data else {"silver_price": 2500, "silver_discount_pct": 20, "gold_price": 5000, "gold_discount_pct": 30}
+    
+    # Smart Calculation
+    silver_orig = int(pricing['silver_price'] / (1 - (pricing['silver_discount_pct']/100)))
+    silver_save = silver_orig - pricing['silver_price']
+    
+    gold_orig = int(pricing['gold_price'] / (1 - (pricing['gold_discount_pct']/100)))
+    gold_save = gold_orig - pricing['gold_price']
     
     col1, col2 = st.columns(2)
     with col1:
-        st.info("**🥈 Silver Package**\n\n- Apps 10ක් සෑදිය හැක.\n- Price: Rs. 2,500")
+        st.info(f"**🥈 Silver Package**\n\n- Apps 10ක් සෑදිය හැක.\n- Price: ~~Rs. {silver_orig}~~ **Rs. {pricing['silver_price']}**\n- 💸 ඔබ රු. {silver_save} ක් ඉතිරි කරයි! ({pricing['silver_discount_pct']}% OFF)")
     with col2:
-        st.warning("**🥇 Gold Package**\n\n- අසීමිත Apps (Unlimited).\n- Price: Rs. 5,000")
+        st.warning(f"**🥇 Gold Package**\n\n- අසීමිත Apps.\n- Price: ~~Rs. {gold_orig}~~ **Rs. {pricing['gold_price']}**\n- 💸 ඔබ රු. {gold_save} ක් ඉතිරි කරයි! ({pricing['gold_discount_pct']}% OFF)")
         
     st.markdown("---")
     with st.form("payment_form"):
-        selected_pkg = st.selectbox("මිලදී ගැනීමට අවශ්‍ය පැකේජය තෝරන්න:", ["silver", "gold"])
-        slip_file = st.file_uploader("ඔබ මුදල් ගෙවූ Slip එක Upload කරන්න (Image/PDF)", type=['jpg', 'jpeg', 'png', 'pdf'])
+        selected_pkg = st.selectbox("පැකේජය තෝරන්න:", ["silver", "gold"])
+        selected_duration = st.selectbox("කාලසීමාව:", [("දින 7 (Test)", 7), ("දින 30 (මාස 1)", 30), ("දින 60", 60)], format_func=lambda x: x[0])
+        slip_file = st.file_uploader("Slip එක Upload කරන්න", type=['jpg', 'jpeg', 'png', 'pdf'])
         
-        submitted = st.form_submit_button("Submit Payment", use_container_width=True)
-        if submitted:
+        if st.form_submit_button("Submit Payment", use_container_width=True):
             if slip_file:
-                with st.spinner("Uploading Slip..."):
+                with st.spinner("Uploading..."):
                     file_path = f"{st.session_state.user.id}/{int(time.time())}_{slip_file.name}"
-                    file_bytes = slip_file.getvalue()
-                    # Upload to payment_slips bucket
-                    supabase.storage.from_("payment_slips").upload(file_path, file_bytes)
+                    supabase.storage.from_("payment_slips").upload(file_path, slip_file.getvalue())
                     slip_url = supabase.storage.from_("payment_slips").get_public_url(file_path)
                     
-                    # Insert to payments table
-                    supabase.table("payments").insert({
-                        "user_id": st.session_state.user.id,
-                        "package_name": selected_pkg,
-                        "slip_url": slip_url,
-                        "status": "pending"
-                    }).execute()
-                    
-                st.success("✅ ඔබගේ ගෙවීම සාර්ථකව ඉදිරිපත් කරන ලදී. Admin විසින් එය අනුමත කළ පසු පැකේජය යාවත්කාලීන වනු ඇත.")
+                    supabase.table("payments").insert({"user_id": st.session_state.user.id, "package_name": selected_pkg, "slip_url": slip_url, "duration_days": selected_duration[1], "status": "pending"}).execute()
+                st.success("✅ සාර්ථකව යවන ලදී.")
             else:
-                st.error("කරුණාකර Slip එක Upload කරන්න.")
+                st.error("Slip එක Upload කරන්න.")
 
-# --- UI: PAYMENT APPROVALS (OWNER/ADMIN) ---
+# --- UI: GOD MODE (OWNER ONLY) ---
+def render_god_mode():
+    st.markdown("### ⚡ God Mode (User Management)")
+    st.write("ඕනෑම යූසර් කෙනෙකුගේ පැකේජය වෙනස් කිරීමට සහ Bonus දවස් ලබා දීමට මෙතැනින් හැක.")
+    
+    users_res = supabase.table("users").select("id, role, package, expires_at").execute()
+    if users_res.data:
+        for u in users_res.data:
+            with st.expander(f"👤 User ID: {u['id'][:8]}... | Role: {u['role'].upper()} | Pkg: {u['package'].upper()}"):
+                st.write(f"**Current Expiry:** {u['expires_at'] if u['expires_at'] else 'N/A'}")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    new_pkg = st.selectbox("Change Package:", ["free", "silver", "gold"], key=f"pkg_{u['id']}")
+                    if st.button("Update Package", key=f"btn_pkg_{u['id']}"):
+                        supabase.table("users").update({"package": new_pkg}).eq("id", u['id']).execute()
+                        st.success(f"Package Updated to {new_pkg.upper()}!")
+                        st.rerun()
+                
+                with col2:
+                    bonus_days = st.number_input("Add Bonus Days:", min_value=1, max_value=365, value=7, key=f"days_{u['id']}")
+                    if st.button("🎁 Give Bonus Days", key=f"btn_bns_{u['id']}"):
+                        # Add days to current expiry, or today if no expiry
+                        if u['expires_at']:
+                            base_date = datetime.fromisoformat(u['expires_at'].replace('Z', '+00:00'))
+                        else:
+                            base_date = datetime.now(timezone.utc)
+                            
+                        new_expiry = (base_date + timedelta(days=bonus_days)).isoformat()
+                        supabase.table("users").update({"expires_at": new_expiry}).eq("id", u['id']).execute()
+                        st.success(f"Added {bonus_days} bonus days!")
+                        st.rerun()
+    else:
+        st.info("Users හමු නොවීය.")
+
+# --- UI: PAYMENT APPROVALS ---
 def render_payment_approvals():
-    st.markdown("### 💰 Pending Payment Approvals")
-    
-    # Get pending payments with user emails
-    # Since we can't easily join auth.users in standard supabase client query easily, we will fetch payments
+    st.markdown("### 💰 Pending Approvals")
     payments_res = supabase.table("payments").select("*").eq("status", "pending").execute()
-    
     if not payments_res.data:
-        st.info("දැනට අනුමත කිරීමට කිසිදු ගෙවීමක් නොමැත.")
+        st.info("ගෙවීම් නොමැත.")
         return
-        
     for pay in payments_res.data:
-        with st.expander(f"Payment ID: #{pay['id']} - Request: {pay['package_name'].upper()}"):
-            st.write(f"**User ID:** {pay['user_id']}")
-            st.write(f"**Requested Package:** {pay['package_name'].upper()}")
-            st.markdown(f"**Slip:** [Click here to view Slip]({pay['slip_url']})")
-            
+        duration = pay.get('duration_days', 30)
+        with st.expander(f"Payment ID: #{pay['id']} - Pkg: {pay['package_name'].upper()} ({duration} Days)"):
+            st.markdown(f"**Slip:** [View Slip]({pay['slip_url']})")
             col1, col2 = st.columns(2)
             with col1:
-                if st.button("✅ Approve", key=f"app_{pay['id']}", type="primary", use_container_width=True):
-                    # 1. Update payment status
+                if st.button("✅ Approve", key=f"app_{pay['id']}", use_container_width=True):
                     supabase.table("payments").update({"status": "approved"}).eq("id", pay['id']).execute()
-                    # 2. Upgrade the user's package!
-                    supabase.table("users").update({"package": pay['package_name']}).eq("id", pay['user_id']).execute()
-                    st.success("Approved successfully!")
-                    time.sleep(1)
+                    new_expiry_date = (datetime.now(timezone.utc) + timedelta(days=duration)).isoformat()
+                    supabase.table("users").update({"package": pay['package_name'], "expires_at": new_expiry_date}).eq("id", pay['user_id']).execute()
+                    st.success("Approved!")
                     st.rerun()
             with col2:
                 if st.button("❌ Reject", key=f"rej_{pay['id']}", use_container_width=True):
                     supabase.table("payments").update({"status": "rejected"}).eq("id", pay['id']).execute()
-                    st.error("Payment Rejected.")
-                    time.sleep(1)
+                    st.error("Rejected.")
                     st.rerun()
 
 # ==========================================
@@ -271,33 +277,25 @@ def render_payment_approvals():
 if not st.session_state.user:
     st.markdown("<h1 style='text-align: center; color: #4B4B4B;'>⚡ AI App Factory</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center;'>Welcome to the Master App Generation Engine</p>", unsafe_allow_html=True)
-    
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         tab1, tab2 = st.tabs(["🔐 Login", "📝 Register"])
-        
         with tab1:
             with st.form("login_form"):
                 email = st.text_input("Email Address")
                 password = st.text_input("Password", type="password")
-                submitted = st.form_submit_button("Login to Dashboard", use_container_width=True)
-                if submitted:
+                if st.form_submit_button("Login to Dashboard", use_container_width=True):
                     login(email, password)
-                    
         with tab2:
             with st.form("register_form"):
                 reg_email = st.text_input("Email Address")
                 reg_password = st.text_input("Password", type="password")
                 reg_confirm = st.text_input("Confirm Password", type="password")
-                reg_submitted = st.form_submit_button("Create Account", use_container_width=True)
-                if reg_submitted:
+                if st.form_submit_button("Create Account", use_container_width=True):
                     if reg_password == reg_confirm and len(reg_password) >= 6:
                         register(reg_email, reg_password)
-                    elif len(reg_password) < 6:
-                        st.error("Password එක අකුරු 6කට වඩා දිග විය යුතුය.")
                     else:
-                        st.error("Passwords සමාන නොවේ.")
-
+                        st.error("Passwords සමාන නොවේ හෝ අකුරු 6කට වඩා අඩුයි.")
 else:
     st.sidebar.title(f"Hi, {st.session_state.user.email}")
     st.sidebar.info(f"🔑 Role: **{st.session_state.role.upper()}**\n\n📦 Pkg: **{st.session_state.package.upper()}**")
@@ -309,20 +307,19 @@ else:
         st.session_state.package = 'free'
         st.rerun()
 
-    # --- ROUTING ---
     if st.session_state.role == 'owner':
-        st.title("👑 Owner Dashboard (Total Control)")
-        tab1, tab2, tab3 = st.tabs(["🚀 App Generator", "💰 Payment Approvals", "⚙️ System Settings"])
+        st.title("👑 Owner Dashboard")
+        tab1, tab2, tab3 = st.tabs(["🚀 Generator", "💰 Approvals", "⚡ God Mode (Users)"])
         with tab1:
             render_generator_dashboard()
         with tab2:
             render_payment_approvals()
         with tab3:
-            st.info("System Settings පසුව එකතු කෙරේ.")
+            render_god_mode()
             
     elif st.session_state.role == 'admin':
         st.title("🛡️ Admin Dashboard")
-        tab1, tab2 = st.tabs(["🚀 App Generator", "💰 Payment Approvals"])
+        tab1, tab2 = st.tabs(["🚀 Generator", "💰 Approvals"])
         with tab1:
             render_generator_dashboard()
         with tab2:
