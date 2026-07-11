@@ -46,7 +46,7 @@ def trigger_social_proof():
             "💡 Silver පැකේජයේ අද දවසේ විශේෂ 20% ක වට්ටමක්!"
         ]
         st.toast(random.choice(messages), icon="🔔")
-        st.session_state.show_toast = False # එක පාරක් විතරක් පෙන්වන්න
+        st.session_state.show_toast = False 
 
 # --- AUTHENTICATION & AUTO-EXPIRE ENGINE ---
 def login(email, password):
@@ -64,11 +64,12 @@ def login(email, password):
             current_pkg = user_data.data[0].get('package', 'free')
             expires_str = user_data.data[0].get('expires_at')
             
-            # --- AUTO EXPIRE LOGIC ---
+            # --- AUTO EXPIRE LOGIC (කාලය ඉවර වුණාම ඉබේම Free වෙන කොටස) ---
             if current_pkg != 'free' and expires_str:
                 expire_date = datetime.fromisoformat(expires_str.replace('Z', '+00:00'))
                 current_date = datetime.now(timezone.utc)
                 if current_date > expire_date:
+                    # කාලය පැනලා නම් Free කරනවා
                     supabase.table("users").update({"package": "free", "expires_at": None}).eq("id", user_id).execute()
                     current_pkg = 'free'
                     expires_str = None
@@ -79,12 +80,11 @@ def login(email, password):
             st.session_state.role = user_data.data[0]['role']
             st.session_state.package = current_pkg
             st.session_state.expires_at = expires_str
-            st.session_state.show_toast = True # Reset toast for new login
+            st.session_state.show_toast = True 
             
             if current_pkg != 'free':
                 st.success(f"සාර්ථකයි! {st.session_state.role.upper()} ලෙස ලොග් විය.")
             
-            # Device tracking
             supabase.table("device_logs").insert({
                 "user_id": user_id,
                 "device_id": st.session_state.device_id,
@@ -113,7 +113,7 @@ def register(email, password):
 def generate_app_background(app_id, final_source_link):
     try:
         supabase.table("generated_apps").update({"status": "processing"}).eq("id", app_id).execute()
-        time.sleep(15) # Simulated AI thinking time
+        time.sleep(15) 
         generated_code = f"""# AI Generated App
 # Source Data: {final_source_link}
 import streamlit as st
@@ -202,7 +202,7 @@ def render_generator_dashboard():
 # --- UI: UPGRADE PACKAGE (SMART OFFERS) ---
 def render_upgrade_section():
     trigger_social_proof()
-    st.markdown("### 💳 Upgrade Your Package")
+    st.markdown("### 💳 Upgrade Your Package (දින 30ක් සඳහා)")
     
     settings_res = supabase.table("system_settings").select("setting_value").eq("setting_key", "pricing").execute()
     pricing = settings_res.data[0]['setting_value'] if settings_res.data else {"silver_price": 2500, "silver_discount_pct": 20, "gold_price": 5000, "gold_discount_pct": 30}
@@ -221,8 +221,8 @@ def render_upgrade_section():
         
     st.markdown("---")
     with st.form("payment_form"):
-        selected_pkg = st.selectbox("පැකේජය තෝරන්න:", ["silver", "gold"])
-        selected_duration = st.selectbox("කාලසීමාව:", [("දින 7 (Test)", 7), ("දින 30 (මාස 1)", 30), ("දින 60 (මාස 2)", 60)], format_func=lambda x: x[0])
+        selected_pkg = st.selectbox("පැකේජය තෝරන්න (මාස 1ක වලංගු කාලයක් සහිතයි):", ["silver", "gold"])
+        # යූසර්ට කාලය තෝරන්න දෙන කොටස සම්පූර්ණයෙන්ම ඉවත් කළා.
         slip_file = st.file_uploader("Slip එක Upload කරන්න (Image/PDF)", type=['jpg', 'jpeg', 'png', 'pdf'])
         
         if st.form_submit_button("Submit Payment", use_container_width=True):
@@ -236,7 +236,7 @@ def render_upgrade_section():
                         "user_id": st.session_state.user.id, 
                         "package_name": selected_pkg, 
                         "slip_url": slip_url, 
-                        "duration_days": selected_duration[1], 
+                        "duration_days": 30, # Payment එකක් කළොත් අනිවාර්යයෙන් දවස් 30යි (මාසෙයි).
                         "status": "pending"
                     }).execute()
                 st.success("✅ ඔබගේ ගෙවීම සාර්ථකව යවන ලදී. Admin විසින් අනුමත කළ පසු යාවත්කාලීන වනු ඇත.")
@@ -257,7 +257,6 @@ def render_god_mode():
                 col1, col2 = st.columns(2)
                 with col1:
                     pkg_options = ["free", "silver", "gold"]
-                    # යූසර්ගේ දැනට තියෙන පැකේජ් එක මුලින්ම පෙන්වනවා
                     current_index = pkg_options.index(u['package']) if u['package'] in pkg_options else 0
                     
                     new_pkg = st.selectbox(
@@ -273,6 +272,7 @@ def render_god_mode():
                         st.rerun()
                 
                 with col2:
+                    # Admin ට විතරක් ඕනෑම දවස් ගාණක් බෝනස් විදිහට දෙන්න පුළුවන්.
                     bonus_days = st.number_input("Add Bonus Days:", min_value=1, max_value=365, value=7, key=f"days_{u['id']}")
                     if st.button("🎁 Give Bonus Days", key=f"btn_bns_{u['id']}"):
                         if u['expires_at']:
