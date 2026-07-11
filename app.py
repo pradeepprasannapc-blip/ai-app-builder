@@ -6,6 +6,8 @@ import threading
 import time
 import random
 from datetime import datetime, timedelta, timezone
+import groq
+import google.generativeai as genai
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="AI App Factory - Master Core", layout="wide")
@@ -36,7 +38,6 @@ def get_user_ip():
     except:
         return "Unknown IP"
 
-# --- MARKETING NOTIFICATIONS (SOCIAL PROOF) ---
 def trigger_social_proof():
     if st.session_state.show_toast:
         messages = [
@@ -64,7 +65,6 @@ def login(email, password):
             current_pkg = user_data.data[0].get('package', 'free')
             expires_str = user_data.data[0].get('expires_at')
             
-            # --- AUTO EXPIRE LOGIC ---
             if current_pkg != 'free' and expires_str:
                 expire_date = datetime.fromisoformat(expires_str.replace('Z', '+00:00'))
                 current_date = datetime.now(timezone.utc)
@@ -108,23 +108,50 @@ def register(email, password):
     except Exception as e:
         st.error(f"Error: {e}")
 
-# --- BACKGROUND TASK ENGINE ---
-def generate_app_background(app_id, final_source_link):
+# --- AI BACKGROUND TASK ENGINE ---
+def generate_app_background(app_id, app_name, final_source_link, selected_ai_model):
     try:
         supabase.table("generated_apps").update({"status": "processing"}).eq("id", app_id).execute()
-        time.sleep(15) 
-        generated_code = f"""# AI Generated App
-# Source Data: {final_source_link}
-import streamlit as st
+        
+        prompt = f"""
+        You are an expert Python Streamlit developer. Create a complete, working Streamlit application.
+        App Name: {app_name}
+        Data/Source Reference: {final_source_link}
+        
+        Requirements:
+        1. Use visually appealing Streamlit UI components (columns, expanders, colored text).
+        2. Ensure the code is error-free.
+        3. ONLY output the python code. Do not include markdown formatting like ```python or any explanations.
+        """
+        
+        generated_code = ""
 
-st.set_page_config(page_title="Generated App")
-st.title("My Awesome Generated App")
-st.write("This app was created by AI App Factory!")
-st.success("Successfully built from source!")
-"""
+        # යූසර් තෝරපු AI මොඩලය අනුව වැඩ කිරීම
+        if selected_ai_model == 'gemini':
+            genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+            model = genai.GenerativeModel('gemini-1.5-pro')
+            response = model.generate_content(prompt)
+            generated_code = response.text
+        else:
+            client = groq.Groq(api_key=st.secrets["GROQ_API_KEY"])
+            chat_completion = client.chat.completions.create(
+                messages=[{"role": "user", "content": prompt}],
+                model="llama3-70b-8192", 
+            )
+            generated_code = chat_completion.choices[0].message.content
+
+        # Markdown කෑලි සුද්ද කිරීම
+        if "```python" in generated_code:
+            generated_code = generated_code.split("```python")[1]
+        if "```" in generated_code:
+            generated_code = generated_code.split("```")[0]
+            
+        generated_code = generated_code.strip()
+
         supabase.table("generated_apps").update({"status": "completed", "app_code": generated_code}).eq("id", app_id).execute()
     except Exception as e:
         supabase.table("generated_apps").update({"status": "failed"}).eq("id", app_id).execute()
+        print(f"AI Generation Error: {e}")
 
 # --- UI: APP GENERATOR DASHBOARD ---
 def render_generator_dashboard():
@@ -148,7 +175,14 @@ def render_generator_dashboard():
         return 
 
     app_name = st.text_input("App එකේ නම", placeholder="Ex: My E-commerce App")
-    upload_option = st.radio("Source එක:", ["🔗 Link එකක් ලබා දීම", "📁 File එකක් Upload කිරීම"], horizontal=True)
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        upload_option = st.radio("Source එක ලබා දෙන ආකාරය:", ["🔗 Link එකක් ලබා දීම", "📁 File එකක් Upload කිරීම"], horizontal=True)
+    with col2:
+        # යූසර්ට AI එක තෝරන්න දෙන කොටස
+        ai_model_choice = st.radio("AI එන්ජිම තෝරන්න:", ["⚡ Groq (Fast)", "🧠 Gemini (Pro)"], horizontal=True)
+        selected_model = "gemini" if "Gemini" in ai_model_choice else "groq"
     
     source_link = ""
     uploaded_file = None
@@ -170,8 +204,9 @@ def render_generator_dashboard():
 
             res = supabase.table("generated_apps").insert({"owner_id": st.session_state.user.id, "app_name": app_name, "source_link": final_source_link, "is_visible": not is_private, "status": "pending"}).execute()
             if res.data:
-                threading.Thread(target=generate_app_background, args=(res.data[0]['id'], final_source_link)).start()
-                st.success("✅ ඔබගේ ඇප් එක සාදමින් පවතී! පහත ලැයිස්තුවෙන් තත්ත්වය බලාගන්න.")
+                # තෝරාගත් AI මොඩලය Thread එකට යවනවා
+                threading.Thread(target=generate_app_background, args=(res.data[0]['id'], app_name, final_source_link, selected_model)).start()
+                st.success(f"✅ ඔබගේ ඇප් එක {selected_model.upper()} AI මගින් සාදමින් පවතී! පහත ලැයිස්තුවෙන් තත්ත්වය බලාගන්න.")
         else:
             st.error("කරුණාකර නම සහ ලින්ක් එක / File එක ලබා දෙන්න.")
 
@@ -240,7 +275,7 @@ def render_upgrade_section():
                         "user_id": st.session_state.user.id, 
                         "package_name": selected_pkg, 
                         "slip_url": slip_url, 
-                        "duration_days": 30, # Payment එකක් කළොත් අනිවාර්යයෙන් දවස් 30යි
+                        "duration_days": 30, 
                         "status": "pending"
                     }).execute()
                 st.success("✅ ඔබගේ ගෙවීම සාර්ථකව යවන ලදී. Admin විසින් අනුමත කළ පසු යාවත්කාලීන වනු ඇත.")
