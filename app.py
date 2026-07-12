@@ -51,7 +51,7 @@ def trigger_social_proof():
         st.toast(random.choice(messages), icon="🔔")
         st.session_state.show_toast = False 
 
-# --- AI GENERATOR ENGINE (BULLETPROOF WORKER WITH MEMORY) ---
+# --- AI GENERATOR ENGINE (WITH VERSION HISTORY) ---
 def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_key):
     db = create_client(supa_url, supa_service_key)
     app_id = app_data['id']
@@ -65,21 +65,23 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
         Reference: {app_data['source_link']}
         
         REQUIREMENTS:
-        1. Use visually appealing Streamlit UI components (columns, expanders, etc.).
+        1. Use visually appealing Streamlit UI components.
         2. Output ONLY the raw Python code. Do not include markdown formatting like ```python.
         3. Do not explain the code. Just output the python script.
-        4. IMPORTANT: Do NOT use non-existent Streamlit commands like `st.footer()`. Stick only to standard, valid Streamlit API methods.
+        4. IMPORTANT: Do NOT use non-existent Streamlit commands like `st.footer()`.
         """
         
+        last_user_prompt = "Initial Generation"
         if app_data.get('app_code'):
             full_prompt += f"\n\n--- CURRENT CODE ---\n{app_data['app_code']}\n"
             
         chat_hist = app_data.get('chat_history') or []
         if chat_hist:
-            full_prompt += "\n--- REQUESTED CHANGES (APPLY THESE TO CURRENT CODE) ---\n"
+            full_prompt += "\n--- REQUESTED CHANGES ---\n"
             for msg in chat_hist:
                 if msg['role'] == 'user':
                     full_prompt += f"User: {msg['content']}\n"
+                    last_user_prompt = msg['content'] # පරණ වර්ෂන් එකට නමක් දෙන්න අන්තිම ප්‍රොම්ප්ට් එක ගන්නවා
             full_prompt += "\nPlease rewrite the entire code applying these requested changes perfectly."
         else:
             full_prompt += "\nWrite the complete initial code."
@@ -102,8 +104,20 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
             generated_code = chat_completion.choices[0].message.content
             
         generated_code = generated_code.replace("```python", "").replace("```", "").strip()
+        
+        # කේතය අප්ඩේට් කිරීම
         db.table("generated_apps").update({"status": "completed", "app_code": generated_code}).eq("id", app_id).execute()
         
+        # MAGIC: අලුත් Version එක Database එකේ සේව් කිරීම (Backup)
+        try:
+            db.table("app_versions").insert({
+                "app_id": app_id, 
+                "version_code": generated_code, 
+                "prompt_used": f"AI: {last_user_prompt}"
+            }).execute()
+        except Exception as ve:
+            print(f"Version Save Error: {ve}") # යම් හෙයකින් වර්ෂන් එක සේව් වුණේ නැතත් ඇප් එක වැඩ කරනවා
+            
     except Exception as e:
         error_msg = f"API Error: {str(e)}"
         db.table("generated_apps").update({"status": "failed", "app_code": error_msg}).eq("id", app_id).execute()
@@ -130,7 +144,7 @@ if not st.session_state.worker_started:
     threading.Thread(target=background_recovery_worker, daemon=True).start()
     st.session_state.worker_started = True
 
-# --- AUTH & AUTO-EXPIRE ENGINE ---
+# --- AUTH LOGIC ---
 def login(email, password):
     try:
         res = supabase.auth.sign_in_with_password({"email": email, "password": password})
@@ -265,7 +279,6 @@ def render_generator_dashboard():
     apps_data = supabase.table("generated_apps").select("*").eq("owner_id", st.session_state.user.id).order("created_at", desc=True).execute()
     if apps_data.data:
         for app in apps_data.data:
-            # MAGIC: ආරක්ෂිතව Status එක ලබා ගැනීම
             status_str = str(app.get('status') or 'unknown').upper()
             app_name_safe = app.get('app_name', 'Untitled')
             
@@ -277,17 +290,29 @@ def render_generator_dashboard():
                 elif status_str == 'PROCESSING':
                     st.warning("⚙️ AI එක මගින් කේතය ලියමින් පවතී... (කරුණාකර මඳ වේලාවකින් Refresh කරන්න)")
                 elif status_str == 'COMPLETED':
-                    st.success("✅ සාර්ථකයි! පහතින් කේතය වෙනස් කරන්න, Preview බලන්න හෝ AI එකෙන් උදව් ඉල්ලන්න.")
+                    st.success("✅ සාර්ථකයි! පහතින් කේතය වෙනස් කරන්න, Preview බලන්න හෝ පරණ සංස්කරණයකට යන්න.")
                     
                     current_code = app.get('app_code', '')
                     
-                    tab_code, tab_preview = st.tabs(["🧑‍💻 Code Editor", "👁️ Live Preview"])
+                    # MAGIC: අලුත් Version History ටැබ් එක මෙතන තියෙනවා
+                    tab_code, tab_preview, tab_history = st.tabs(["🧑‍💻 Code Editor", "👁️ Live Preview", "⏪ Version History"])
                     
                     with tab_code:
                         edited_code = st.text_area("මෙහි කේතය අතින් වෙනස් කළ හැක:", value=current_code, height=350, key=f"edit_{app['id']}")
                         if st.button("💾 Save Manual Changes", key=f"save_{app['id']}"):
                             if edited_code != current_code:
                                 supabase.table("generated_apps").update({"app_code": edited_code}).eq("id", app['id']).execute()
+                                
+                                # අතින් කරපු වෙනස්කම් ටිකත් Version එකක් විදිහට සේව් කරනවා
+                                try:
+                                    supabase.table("app_versions").insert({
+                                        "app_id": app['id'],
+                                        "version_code": edited_code,
+                                        "prompt_used": "Manual Edit (අතින් කළ වෙනස්කමක්)"
+                                    }).execute()
+                                except Exception as e:
+                                    pass 
+                                    
                                 st.success("වෙනස්කම් සාර්ථකව Save කළා!")
                                 time.sleep(1)
                                 st.rerun()
@@ -297,12 +322,32 @@ def render_generator_dashboard():
                         if st.button("▶️ Run Preview", key=f"run_{app['id']}", type="primary"):
                             try:
                                 safe_code = "\n".join([line for line in current_code.split('\n') if 'st.set_page_config' not in line and 'st.footer' not in line])
-                                
                                 st.markdown("### 📱 Live App Demo")
                                 with st.container(border=True):
                                     exec(safe_code, globals(), {})
                             except Exception as e:
                                 st.error(f"Preview එක Run කිරීමේදී දෝෂයක්: {e}")
+                                
+                    with tab_history:
+                        st.markdown("### ⏪ පෙර සංස්කරණ (Backup)")
+                        try:
+                            v_res = supabase.table("app_versions").select("*").eq("app_id", app['id']).order("created_at", desc=True).execute()
+                            if v_res.data:
+                                for idx, v in enumerate(v_res.data):
+                                    v_time = v['created_at'][:19].replace('T', ' ')
+                                    with st.container(border=True):
+                                        st.write(f"**Version {len(v_res.data) - idx}** | ⏰ {v_time}")
+                                        st.caption(f"📝 {v.get('prompt_used', 'N/A')}")
+                                        
+                                        if st.button("🔄 මේ සංස්කරණයට ආපසු යන්න (Restore)", key=f"res_{v['id']}"):
+                                            supabase.table("generated_apps").update({"app_code": v['version_code']}).eq("id", app['id']).execute()
+                                            st.success("✅ කලින් සංස්කරණය සාර්ථකව Restore කළා! Refresh වෙමින් පවතී...")
+                                            time.sleep(1.5)
+                                            st.rerun()
+                            else:
+                                st.info("පෙර සංස්කරණ කිසිවක් හමු නොවීය.")
+                        except Exception as e:
+                            st.error("Versions ලබාගැනීමේ දෝෂයක්. (පරණ Apps වලට මෙය අදාළ නොවෙන්න පුළුවන්)")
                                 
                     st.markdown("---")
                     
@@ -396,96 +441,58 @@ def render_upgrade_section():
             else:
                 st.error("කරුණාකර Slip එක Upload කරන්න.")
 
-# --- UI: GOD MODE (OWNER ONLY) ---
+# --- UI: GOD MODE & ADMIN ---
 def render_god_mode():
     st.markdown("### ⚡ God Mode (User Management)")
-    st.write("ඕනෑම යූසර් කෙනෙකුගේ පැකේජය වෙනස් කිරීමට සහ Bonus දවස් ලබා දීමට මෙතැනින් හැක.")
-    
     users_res = supabase.table("users").select("id, role, package, expires_at").execute()
     if users_res.data:
         for u in users_res.data:
-            # MAGIC: ආරක්ෂිතව Role සහ Package ලබා ගැනීම
             role_str = str(u.get('role') or 'user').upper()
             pkg_str = str(u.get('package') or 'free').upper()
-            
             with st.expander(f"👤 User ID: {u['id'][:8]}... | Role: {role_str} | Pkg: {pkg_str}"):
-                st.write(f"**Current Expiry:** {u['expires_at'] if u['expires_at'] else 'N/A'}")
-                
                 col1, col2 = st.columns(2)
                 with col1:
                     pkg_options = ["free", "silver", "gold"]
                     current_pkg = str(u.get('package') or 'free').lower()
                     current_index = pkg_options.index(current_pkg) if current_pkg in pkg_options else 0
-                    
-                    new_pkg = st.selectbox(
-                        "Change Package:", 
-                        pkg_options, 
-                        index=current_index,
-                        key=f"pkg_{u['id']}"
-                    )
-                    
+                    new_pkg = st.selectbox("Change Package:", pkg_options, index=current_index, key=f"pkg_{u['id']}")
                     if st.button("Update Package", key=f"btn_pkg_{u['id']}"):
                         supabase.table("users").update({"package": new_pkg}).eq("id", u['id']).execute()
-                        st.success(f"Package Updated to {new_pkg.upper()}!")
+                        st.success(f"Updated!")
                         st.rerun()
-                
                 with col2:
                     bonus_days = st.number_input("Add Bonus Days:", min_value=1, max_value=365, value=7, key=f"days_{u['id']}")
-                    if st.button("🎁 Give Bonus Days", key=f"btn_bns_{u['id']}"):
-                        if u['expires_at']:
-                            base_date = datetime.fromisoformat(u['expires_at'].replace('Z', '+00:00'))
-                        else:
-                            base_date = datetime.now(timezone.utc)
-                            
+                    if st.button("🎁 Give Bonus", key=f"btn_bns_{u['id']}"):
+                        base_date = datetime.fromisoformat(u['expires_at'].replace('Z', '+00:00')) if u['expires_at'] else datetime.now(timezone.utc)
                         new_expiry = (base_date + timedelta(days=bonus_days)).isoformat()
                         supabase.table("users").update({"expires_at": new_expiry}).eq("id", u['id']).execute()
-                        st.success(f"Added {bonus_days} bonus days!")
+                        st.success(f"Added {bonus_days} days!")
                         st.rerun()
-    else:
-        st.info("Users හමු නොවීය.")
 
-# --- UI: GLOBAL APP MANAGEMENT (ADMIN/OWNER ONLY) ---
 def render_admin_app_management():
     st.markdown("### 📱 Global App Management")
-    st.write("පද්ධතියේ ඇති සියලුම යූසර්ලාගේ Apps මෙතැනින් පාලනය කළ හැක (Hide / Delete).")
-    
     all_apps_res = supabase.table("generated_apps").select("*").order("created_at", desc=True).execute()
-    
     if all_apps_res.data:
         for app in all_apps_res.data:
-            # MAGIC: මෙතනත් දෝෂ වළක්වා ගැනීමට ආරක්ෂිතව දත්ත ලබා ගනිමු
             visibility_status = "Public 👁️" if app.get('is_visible', True) else "Private 🔒"
             status_str = str(app.get('status') or 'unknown').upper()
             app_name_safe = app.get('app_name', 'Untitled')
-            
             with st.expander(f"📦 {app_name_safe} | Status: {status_str} | Vis: {visibility_status}"):
                 st.write(f"**App ID:** `{app['id']}`")
-                st.write(f"**Owner ID:** `{app.get('owner_id', 'N/A')}`")
-                
-                # මෙන්න අර දෝෂය ආපු තැන හරියටම ෆික්ස් කරලා තියෙන්නේ
                 model_name = str(app.get('selected_model') or 'N/A').upper()
                 st.write(f"**AI Model:** {model_name}")
-                
                 col1, col2 = st.columns(2)
                 with col1:
                     is_visible = app.get('is_visible', True)
-                    btn_text = "🔴 Hide from Public" if is_visible else "🟢 Make Public"
+                    btn_text = "🔴 Hide" if is_visible else "🟢 Make Public"
                     if st.button(btn_text, key=f"vis_toggle_{app['id']}", use_container_width=True):
                         supabase.table("generated_apps").update({"is_visible": not is_visible}).eq("id", app['id']).execute()
-                        st.success("Visibility යාවත්කාලීන කළා!")
-                        time.sleep(1)
                         st.rerun()
-                        
                 with col2:
-                    if st.button("🗑️ Delete App", key=f"del_app_{app['id']}", type="primary", use_container_width=True):
+                    if st.button("🗑️ Delete", key=f"del_app_{app['id']}", type="primary", use_container_width=True):
                         supabase.table("generated_apps").delete().eq("id", app['id']).execute()
-                        st.success("App එක සම්පූර්ණයෙන්ම මකා දැමුවා!")
-                        time.sleep(1)
                         st.rerun()
-    else:
-        st.info("සිස්ටම් එකේ කිසිදු ඇප් එකක් නොමැත.")
 
-# --- UI: PAYMENT APPROVALS ---
 def render_payment_approvals():
     st.markdown("### 💰 Pending Approvals")
     payments_res = supabase.table("payments").select("*").eq("status", "pending").execute()
@@ -494,25 +501,19 @@ def render_payment_approvals():
         return
     for pay in payments_res.data:
         duration = pay.get('duration_days', 30)
-        # MAGIC: ආරක්ෂිතව Package Name එක ලබා ගැනීම
         pkg_name = str(pay.get('package_name') or 'unknown').upper()
-        
         with st.expander(f"Payment ID: #{pay['id']} - Pkg: {pkg_name} ({duration} Days)"):
-            st.markdown(f"**Slip:** [Click here to view Slip]({pay.get('slip_url', '#')})")
+            st.markdown(f"**Slip:** [Click here to view]({pay.get('slip_url', '#')})")
             col1, col2 = st.columns(2)
             with col1:
                 if st.button("✅ Approve", key=f"app_{pay['id']}", use_container_width=True, type="primary"):
                     supabase.table("payments").update({"status": "approved"}).eq("id", pay['id']).execute()
                     new_expiry_date = (datetime.now(timezone.utc) + timedelta(days=duration)).isoformat()
                     supabase.table("users").update({"package": pay.get('package_name', 'free'), "expires_at": new_expiry_date}).eq("id", pay['user_id']).execute()
-                    st.success("Approved!")
-                    time.sleep(1)
                     st.rerun()
             with col2:
                 if st.button("❌ Reject", key=f"rej_{pay['id']}", use_container_width=True):
                     supabase.table("payments").update({"status": "rejected"}).eq("id", pay['id']).execute()
-                    st.error("Rejected.")
-                    time.sleep(1)
                     st.rerun()
 
 # ==========================================
