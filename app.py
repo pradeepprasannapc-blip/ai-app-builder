@@ -51,7 +51,7 @@ def trigger_social_proof():
         st.toast(random.choice(messages), icon="🔔")
         st.session_state.show_toast = False 
 
-# --- AI GENERATOR ENGINE (WITH VERSION HISTORY) ---
+# --- AI GENERATOR ENGINE (STRICT & BULLETPROOF WORKER) ---
 def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_key):
     db = create_client(supa_url, supa_service_key)
     app_id = app_data['id']
@@ -59,16 +59,17 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
     try:
         db.table("generated_apps").update({"status": "processing"}).eq("id", app_id).execute()
         
+        # MAGIC: AI එකට දෙන අතිශය දැඩි නීති මාලාව (Strict Prompt)
         full_prompt = f"""
-        You are an expert Python Streamlit developer. 
+        You are an elite, highly precise Python Streamlit developer.
         App Name: {app_data['app_name']}
         Reference: {app_data['source_link']}
         
-        REQUIREMENTS:
-        1. Use visually appealing Streamlit UI components.
-        2. Output ONLY the raw Python code. Do not include markdown formatting like ```python.
-        3. Do not explain the code. Just output the python script.
-        4. IMPORTANT: Do NOT use non-existent Streamlit commands like `st.footer()`.
+        CRITICAL RULES (MUST FOLLOW STRICTLY):
+        1. OUTPUT PURE PYTHON CODE ONLY. Absolutely NO markdown formatting (DO NOT use ```python or ```).
+        2. NO introductory text, NO explanations, NO comments outside the code. Start immediately with 'import streamlit as st'.
+        3. STRICT PYTHON INDENTATION. Ensure spaces are mathematically perfect (exactly 4 spaces per indent level). Improper indentation will break the system.
+        4. NEVER use non-existent Streamlit commands (e.g., NO st.footer). Only use standard, valid Streamlit API components.
         """
         
         last_user_prompt = "Initial Generation"
@@ -81,10 +82,10 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
             for msg in chat_hist:
                 if msg['role'] == 'user':
                     full_prompt += f"User: {msg['content']}\n"
-                    last_user_prompt = msg['content'] # පරණ වර්ෂන් එකට නමක් දෙන්න අන්තිම ප්‍රොම්ප්ට් එක ගන්නවා
-            full_prompt += "\nPlease rewrite the entire code applying these requested changes perfectly."
+                    last_user_prompt = msg['content']
+            full_prompt += "\nPlease rewrite the entire code applying these requested changes flawlessly while obeying ALL CRITICAL RULES above."
         else:
-            full_prompt += "\nWrite the complete initial code."
+            full_prompt += "\nWrite the complete initial code obeying ALL CRITICAL RULES above."
             
         generated_code = ""
 
@@ -103,12 +104,15 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
             )
             generated_code = chat_completion.choices[0].message.content
             
+        # MAGIC: කේතය පිරිසිදු කිරීම (Aggressive Cleanup)
+        # Markdown කෑලි බලහත්කාරයෙන් අයින් කරනවා, වටේ තියෙන හිස්තැන් මකනවා
         generated_code = generated_code.replace("```python", "").replace("```", "").strip()
         
-        # කේතය අප්ඩේට් කිරීම
+        # පළමු පේළියේ අනවශ්‍ය හිස්තැන් තිබ්බොත් ඒකත් මකනවා (indentation errors වළක්වන්න)
+        generated_code = generated_code.lstrip() 
+        
         db.table("generated_apps").update({"status": "completed", "app_code": generated_code}).eq("id", app_id).execute()
         
-        # MAGIC: අලුත් Version එක Database එකේ සේව් කිරීම (Backup)
         try:
             db.table("app_versions").insert({
                 "app_id": app_id, 
@@ -116,7 +120,7 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
                 "prompt_used": f"AI: {last_user_prompt}"
             }).execute()
         except Exception as ve:
-            print(f"Version Save Error: {ve}") # යම් හෙයකින් වර්ෂන් එක සේව් වුණේ නැතත් ඇප් එක වැඩ කරනවා
+            print(f"Version Save Error: {ve}") 
             
     except Exception as e:
         error_msg = f"API Error: {str(e)}"
@@ -294,7 +298,6 @@ def render_generator_dashboard():
                     
                     current_code = app.get('app_code', '')
                     
-                    # MAGIC: අලුත් Version History ටැබ් එක මෙතන තියෙනවා
                     tab_code, tab_preview, tab_history = st.tabs(["🧑‍💻 Code Editor", "👁️ Live Preview", "⏪ Version History"])
                     
                     with tab_code:
@@ -303,7 +306,6 @@ def render_generator_dashboard():
                             if edited_code != current_code:
                                 supabase.table("generated_apps").update({"app_code": edited_code}).eq("id", app['id']).execute()
                                 
-                                # අතින් කරපු වෙනස්කම් ටිකත් Version එකක් විදිහට සේව් කරනවා
                                 try:
                                     supabase.table("app_versions").insert({
                                         "app_id": app['id'],
