@@ -265,14 +265,18 @@ def render_generator_dashboard():
     apps_data = supabase.table("generated_apps").select("*").eq("owner_id", st.session_state.user.id).order("created_at", desc=True).execute()
     if apps_data.data:
         for app in apps_data.data:
-            with st.expander(f"📦 {app['app_name']} - Status: {app['status'].upper()}"):
-                st.write(f"**Source:** {app['source_link']}")
+            # MAGIC: ආරක්ෂිතව Status එක ලබා ගැනීම
+            status_str = str(app.get('status') or 'unknown').upper()
+            app_name_safe = app.get('app_name', 'Untitled')
+            
+            with st.expander(f"📦 {app_name_safe} - Status: {status_str}"):
+                st.write(f"**Source:** {app.get('source_link', 'N/A')}")
                 
-                if app['status'] == 'pending':
+                if status_str == 'PENDING':
                     st.info("⏳ පෝලිමේ ඇත...")
-                elif app['status'] == 'processing':
+                elif status_str == 'PROCESSING':
                     st.warning("⚙️ AI එක මගින් කේතය ලියමින් පවතී... (කරුණාකර මඳ වේලාවකින් Refresh කරන්න)")
-                elif app['status'] == 'completed':
+                elif status_str == 'COMPLETED':
                     st.success("✅ සාර්ථකයි! පහතින් කේතය වෙනස් කරන්න, Preview බලන්න හෝ AI එකෙන් උදව් ඉල්ලන්න.")
                     
                     current_code = app.get('app_code', '')
@@ -335,7 +339,7 @@ def render_generator_dashboard():
                             else:
                                 st.warning("කරුණාකර වෙනස්කම ටයිප් කරන්න.")
                                 
-                elif app['status'] == 'failed':
+                elif status_str == 'FAILED':
                     st.error(f"❌ {app.get('app_code', 'නැවත උත්සාහ කරන්න.')}")
                 
                 if st.button("🔄 Refresh Status", key=f"ref_{app['id']}"):
@@ -400,13 +404,18 @@ def render_god_mode():
     users_res = supabase.table("users").select("id, role, package, expires_at").execute()
     if users_res.data:
         for u in users_res.data:
-            with st.expander(f"👤 User ID: {u['id'][:8]}... | Role: {u['role'].upper()} | Pkg: {u['package'].upper()}"):
+            # MAGIC: ආරක්ෂිතව Role සහ Package ලබා ගැනීම
+            role_str = str(u.get('role') or 'user').upper()
+            pkg_str = str(u.get('package') or 'free').upper()
+            
+            with st.expander(f"👤 User ID: {u['id'][:8]}... | Role: {role_str} | Pkg: {pkg_str}"):
                 st.write(f"**Current Expiry:** {u['expires_at'] if u['expires_at'] else 'N/A'}")
                 
                 col1, col2 = st.columns(2)
                 with col1:
                     pkg_options = ["free", "silver", "gold"]
-                    current_index = pkg_options.index(u['package']) if u['package'] in pkg_options else 0
+                    current_pkg = str(u.get('package') or 'free').lower()
+                    current_index = pkg_options.index(current_pkg) if current_pkg in pkg_options else 0
                     
                     new_pkg = st.selectbox(
                         "Change Package:", 
@@ -440,16 +449,22 @@ def render_admin_app_management():
     st.markdown("### 📱 Global App Management")
     st.write("පද්ධතියේ ඇති සියලුම යූසර්ලාගේ Apps මෙතැනින් පාලනය කළ හැක (Hide / Delete).")
     
-    # සිස්ටම් එකේ තියෙන ඔක්කොම Apps අදිනවා
     all_apps_res = supabase.table("generated_apps").select("*").order("created_at", desc=True).execute()
     
     if all_apps_res.data:
         for app in all_apps_res.data:
+            # MAGIC: මෙතනත් දෝෂ වළක්වා ගැනීමට ආරක්ෂිතව දත්ත ලබා ගනිමු
             visibility_status = "Public 👁️" if app.get('is_visible', True) else "Private 🔒"
-            with st.expander(f"📦 {app['app_name']} | Status: {app['status'].upper()} | Vis: {visibility_status}"):
+            status_str = str(app.get('status') or 'unknown').upper()
+            app_name_safe = app.get('app_name', 'Untitled')
+            
+            with st.expander(f"📦 {app_name_safe} | Status: {status_str} | Vis: {visibility_status}"):
                 st.write(f"**App ID:** `{app['id']}`")
-                st.write(f"**Owner ID:** `{app['owner_id']}`")
-                st.write(f"**AI Model:** {app.get('selected_model', 'N/A').upper()}")
+                st.write(f"**Owner ID:** `{app.get('owner_id', 'N/A')}`")
+                
+                # මෙන්න අර දෝෂය ආපු තැන හරියටම ෆික්ස් කරලා තියෙන්නේ
+                model_name = str(app.get('selected_model') or 'N/A').upper()
+                st.write(f"**AI Model:** {model_name}")
                 
                 col1, col2 = st.columns(2)
                 with col1:
@@ -479,14 +494,17 @@ def render_payment_approvals():
         return
     for pay in payments_res.data:
         duration = pay.get('duration_days', 30)
-        with st.expander(f"Payment ID: #{pay['id']} - Pkg: {pay['package_name'].upper()} ({duration} Days)"):
-            st.markdown(f"**Slip:** [Click here to view Slip]({pay['slip_url']})")
+        # MAGIC: ආරක්ෂිතව Package Name එක ලබා ගැනීම
+        pkg_name = str(pay.get('package_name') or 'unknown').upper()
+        
+        with st.expander(f"Payment ID: #{pay['id']} - Pkg: {pkg_name} ({duration} Days)"):
+            st.markdown(f"**Slip:** [Click here to view Slip]({pay.get('slip_url', '#')})")
             col1, col2 = st.columns(2)
             with col1:
                 if st.button("✅ Approve", key=f"app_{pay['id']}", use_container_width=True, type="primary"):
                     supabase.table("payments").update({"status": "approved"}).eq("id", pay['id']).execute()
                     new_expiry_date = (datetime.now(timezone.utc) + timedelta(days=duration)).isoformat()
-                    supabase.table("users").update({"package": pay['package_name'], "expires_at": new_expiry_date}).eq("id", pay['user_id']).execute()
+                    supabase.table("users").update({"package": pay.get('package_name', 'free'), "expires_at": new_expiry_date}).eq("id", pay['user_id']).execute()
                     st.success("Approved!")
                     time.sleep(1)
                     st.rerun()
@@ -537,7 +555,6 @@ else:
         st.session_state.expires_at = None
         st.rerun()
 
-    # --- අලුත් Admin/Owner Navigation ---
     if st.session_state.role == 'owner':
         st.title("👑 Owner Dashboard")
         tab1, tab2, tab3, tab4 = st.tabs(["🚀 Generator", "💰 Approvals", "⚡ God Mode (Users)", "📱 Global Apps"])
@@ -548,7 +565,7 @@ else:
         with tab3:
             render_god_mode()
         with tab4:
-            render_admin_app_management() # අලුත් ටැබ් එක
+            render_admin_app_management()
             
     elif st.session_state.role == 'admin':
         st.title("🛡️ Admin Dashboard")
@@ -558,7 +575,7 @@ else:
         with tab2:
             render_payment_approvals()
         with tab3:
-            render_admin_app_management() # අලුත් ටැබ් එක
+            render_admin_app_management()
         
     elif st.session_state.role in ['user', 'moderator']:
         st.title("🚀 User Dashboard")
