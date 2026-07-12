@@ -8,6 +8,7 @@ import random
 from datetime import datetime, timedelta, timezone
 import groq
 from google import genai 
+import re # MAGIC: අලුත් Regex Module එක
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="AI App Factory - Master Core", layout="wide")
@@ -59,7 +60,6 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
     try:
         db.table("generated_apps").update({"status": "processing"}).eq("id", app_id).execute()
         
-        # MAGIC: AI එකට දෙන අතිශය දැඩි නීති මාලාව (Strict Prompt)
         full_prompt = f"""
         You are an elite, highly precise Python Streamlit developer.
         App Name: {app_data['app_name']}
@@ -104,11 +104,7 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
             )
             generated_code = chat_completion.choices[0].message.content
             
-        # MAGIC: කේතය පිරිසිදු කිරීම (Aggressive Cleanup)
-        # Markdown කෑලි බලහත්කාරයෙන් අයින් කරනවා, වටේ තියෙන හිස්තැන් මකනවා
         generated_code = generated_code.replace("```python", "").replace("```", "").strip()
-        
-        # පළමු පේළියේ අනවශ්‍ය හිස්තැන් තිබ්බොත් ඒකත් මකනවා (indentation errors වළක්වන්න)
         generated_code = generated_code.lstrip() 
         
         db.table("generated_apps").update({"status": "completed", "app_code": generated_code}).eq("id", app_id).execute()
@@ -323,7 +319,15 @@ def render_generator_dashboard():
                         st.info("💡 පහත බොත්තම ඔබා ඔබගේ ඇප් එකේ පෙරදසුනක් (Live Preview) මෙතනම බලාගන්න.")
                         if st.button("▶️ Run Preview", key=f"run_{app['id']}", type="primary"):
                             try:
-                                safe_code = "\n".join([line for line in current_code.split('\n') if 'st.set_page_config' not in line and 'st.footer' not in line])
+                                # MAGIC: Smart Regex පාවිච්චි කරලා Multi-line කමාන්ඩ්ස් සම්පූර්ණයෙන්ම මකා දැමීම
+                                safe_code = re.sub(r'st\.set_page_config\s*\([^)]*\)', '', current_code)
+                                safe_code = re.sub(r'st\.footer\s*\([^)]*\)', '', safe_code)
+                                
+                                # AI එක කරන මෝඩ අකුරු වැරදි (Capitalizations) හදමු
+                                safe_code = safe_code.replace("Import streamlit", "import streamlit")
+                                safe_code = safe_code.replace("Import youtubepy", "import youtubepy")
+                                safe_code = safe_code.replace("Import pandas", "import pandas")
+                                
                                 st.markdown("### 📱 Live App Demo")
                                 with st.container(border=True):
                                     exec(safe_code, globals(), {})
