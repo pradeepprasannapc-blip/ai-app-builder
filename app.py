@@ -84,7 +84,7 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
             client = groq.Groq(api_key=groq_key)
             chat_completion = client.chat.completions.create(
                 messages=[{"role": "user", "content": prompt}],
-                model="llama3-70b-8192", 
+                model="llama-3.1-70b-versatile", # <-- අලුත් Groq මොඩල් එක මෙතන තියෙනවා
             )
             generated_code = chat_completion.choices[0].message.content
             
@@ -101,7 +101,7 @@ def background_recovery_worker():
     try:
         # MAGIC: .strip() පාවිච්චි කරලා හැංගිච්ච spaces අයින් කරනවා, වගේම නිවැරදි කී වල නම් භාවිතා කරනවා!
         groq_key = st.secrets.get("GROQ_API_KEY", "").strip()
-        gemini_key = st.secrets.get("GEMINI_KEY", "").strip() # මෙන්න Gemini කී එක හැදුවා!
+        gemini_key = st.secrets.get("GEMINI_KEY", "").strip() 
         
         supa_url = st.secrets["SUPABASE_URL"].strip()
         supa_service_key = st.secrets.get("SUPABASE_SERVICE_KEY", st.secrets["SUPABASE_KEY"]).strip()
@@ -236,7 +236,6 @@ def render_generator_dashboard():
             }).execute()
             
             if res.data:
-                # MAGIC: කී වල හිස්තැන් කපලා අරගන්නවා (සහ Service Role කී එක පාවිච්චි කරනවා)
                 groq_key = st.secrets.get("GROQ_API_KEY", "").strip()
                 gemini_key = st.secrets.get("GEMINI_KEY", "").strip()
                 supa_url = st.secrets["SUPABASE_URL"].strip()
@@ -265,7 +264,6 @@ def render_generator_dashboard():
                     st.success("✅ සාර්ථකයි! පහතින් කේතය බලාගන්න.")
                     st.code(app.get('app_code', ''), language='python')
                 elif app['status'] == 'failed':
-                    # දැන් Error එක කෙලින්ම මෙතන රතු පාටින් පෙන්නනවා
                     st.error(f"❌ {app.get('app_code', 'නැවත උත්සාහ කරන්න.')}")
                 
                 if st.button("🔄 Refresh", key=f"ref_{app['id']}"):
