@@ -84,8 +84,8 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
             client = groq.Groq(api_key=groq_key)
             chat_completion = client.chat.completions.create(
                 messages=[{"role": "user", "content": prompt}],
-                # මෙන්න අලුත්ම සහ ස්ථාවර Groq මොඩල් එක
-                model="mixtral-8x7b-32768", 
+                # මෙන්න අලුත්ම සහ සුපිරිම Groq මොඩල් එක
+                model="llama-3.3-70b-versatile", 
             )
             generated_code = chat_completion.choices[0].message.content
             
