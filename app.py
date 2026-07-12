@@ -59,7 +59,6 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
     try:
         db.table("generated_apps").update({"status": "processing"}).eq("id", app_id).execute()
         
-        # අලුත් ආරක්ෂිත Prompt එක
         full_prompt = f"""
         You are an expert Python Streamlit developer. 
         App Name: {app_data['app_name']}
@@ -293,7 +292,6 @@ def render_generator_dashboard():
                         st.info("💡 පහත බොත්තම ඔබා ඔබගේ ඇප් එකේ පෙරදසුනක් (Live Preview) මෙතනම බලාගන්න.")
                         if st.button("▶️ Run Preview", key=f"run_{app['id']}", type="primary"):
                             try:
-                                # Magic 2: st.set_page_config සහ st.footer වගේ අවුල් කමාන්ඩ් ටික අයින් කරමු!
                                 safe_code = "\n".join([line for line in current_code.split('\n') if 'st.set_page_config' not in line and 'st.footer' not in line])
                                 
                                 st.markdown("### 📱 Live App Demo")
@@ -317,11 +315,21 @@ def render_generator_dashboard():
                         if st.button("🚀 Update with AI", key=f"ai_upd_{app['id']}", type="primary"):
                             if new_prompt:
                                 new_hist = chat_hist + [{"role": "user", "content": new_prompt}]
-                                supabase.table("generated_apps").update({
+                                res_update = supabase.table("generated_apps").update({
                                     "status": "pending",
                                     "chat_history": new_hist,
                                     "app_code": edited_code 
                                 }).eq("id", app['id']).execute()
+                                
+                                # --- මෙන්න අර මට අමතක වෙච්ච MAGIC කෑල්ල (AI එක අවදි කිරීම)! ---
+                                if res_update.data:
+                                    groq_key = st.secrets.get("GROQ_API_KEY", "").strip()
+                                    gemini_key = st.secrets.get("GEMINI_KEY", "").strip()
+                                    supa_url = st.secrets["SUPABASE_URL"].strip()
+                                    supa_service_key = st.secrets.get("SUPABASE_SERVICE_KEY", st.secrets["SUPABASE_KEY"]).strip()
+                                    
+                                    threading.Thread(target=process_single_app, args=(res_update.data[0], groq_key, gemini_key, supa_url, supa_service_key), daemon=True).start()
+                                # -------------------------------------------------------------
                                 
                                 st.success("AI එක ඔබේ අලුත් ඉල්ලීම කියවමින් පවතී! Refresh කර බලන්න.")
                                 time.sleep(2)
