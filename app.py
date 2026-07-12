@@ -51,40 +51,54 @@ def trigger_social_proof():
         st.toast(random.choice(messages), icon="🔔")
         st.session_state.show_toast = False 
 
-# --- AI GENERATOR ENGINE (BULLETPROOF WORKER) ---
+# --- AI GENERATOR ENGINE (BULLETPROOF WORKER WITH MEMORY) ---
 def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_key):
-    # මෙතන පාවිච්චි කරන්නේ Service Role Key එකයි! (Super Admin බලය)
     db = create_client(supa_url, supa_service_key)
     app_id = app_data['id']
     
     try:
         db.table("generated_apps").update({"status": "processing"}).eq("id", app_id).execute()
         
-        prompt = f"""
-        You are an expert Python Streamlit developer. Create a complete, working Streamlit application.
+        # 🧠 AI එකට මතකය දෙන Prompt එක නිර්මාණය කිරීම
+        full_prompt = f"""
+        You are an expert Python Streamlit developer. 
         App Name: {app_data['app_name']}
-        Data/Source Reference: {app_data['source_link']}
+        Reference: {app_data['source_link']}
         
-        Requirements:
-        1. Use visually appealing Streamlit UI components (columns, expanders, colored text).
-        2. Ensure the code is error-free.
-        3. ONLY output the python code. Do not include markdown formatting like ```python or any explanations.
+        REQUIREMENTS:
+        1. Use visually appealing Streamlit UI components (columns, expanders, etc.).
+        2. Output ONLY the raw Python code. Do not include markdown formatting like ```python.
+        3. Do not explain the code. Just output the python script.
         """
         
+        # කලින් කේතයක් තිබ්බා නම් ඒකත් යවනවා
+        if app_data.get('app_code'):
+            full_prompt += f"\n\n--- CURRENT CODE ---\n{app_data['app_code']}\n"
+            
+        # යූසර්ගේ අලුත් ඉල්ලීම් (Chat History) යවනවා
+        chat_hist = app_data.get('chat_history') or []
+        if chat_hist:
+            full_prompt += "\n--- REQUESTED CHANGES (APPLY THESE TO CURRENT CODE) ---\n"
+            for msg in chat_hist:
+                if msg['role'] == 'user':
+                    full_prompt += f"User: {msg['content']}\n"
+            full_prompt += "\nPlease rewrite the entire code applying these requested changes perfectly."
+        else:
+            full_prompt += "\nWrite the complete initial code."
+            
         generated_code = ""
 
         if app_data.get('selected_model') == 'gemini':
             client = genai.Client(api_key=gemini_key)
             response = client.models.generate_content(
                 model='gemini-2.5-flash',
-                contents=prompt,
+                contents=full_prompt,
             )
             generated_code = response.text
         else:
             client = groq.Groq(api_key=groq_key)
             chat_completion = client.chat.completions.create(
-                messages=[{"role": "user", "content": prompt}],
-                # මෙන්න අලුත්ම සහ සුපිරිම Groq මොඩල් එක
+                messages=[{"role": "user", "content": full_prompt}],
                 model="llama-3.3-70b-versatile", 
             )
             generated_code = chat_completion.choices[0].message.content
@@ -93,7 +107,6 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
         db.table("generated_apps").update({"status": "completed", "app_code": generated_code}).eq("id", app_id).execute()
         
     except Exception as e:
-        # දෝෂය කෙලින්ම Database එකට දානවා (UI එකේ රතු පාටින් පෙන්වන්න)
         error_msg = f"API Error: {str(e)}"
         db.table("generated_apps").update({"status": "failed", "app_code": error_msg}).eq("id", app_id).execute()
         print(f"Worker Error on {app_id}: {e}")
@@ -232,7 +245,8 @@ def render_generator_dashboard():
                 "source_link": final_source_link, 
                 "is_visible": not is_private, 
                 "status": "pending",
-                "selected_model": selected_model
+                "selected_model": selected_model,
+                "chat_history": [] # අලුත් ටේබල් Column එක
             }).execute()
             
             if res.data:
@@ -255,18 +269,56 @@ def render_generator_dashboard():
         for app in apps_data.data:
             with st.expander(f"📦 {app['app_name']} - Status: {app['status'].upper()}"):
                 st.write(f"**Source:** {app['source_link']}")
-                st.write(f"**Visibility:** {'Public' if app.get('is_visible', True) else 'Private'}")
+                
                 if app['status'] == 'pending':
                     st.info("⏳ පෝලිමේ ඇත...")
                 elif app['status'] == 'processing':
                     st.warning("⚙️ AI එක මගින් කේතය ලියමින් පවතී... (කරුණාකර මඳ වේලාවකින් Refresh කරන්න)")
                 elif app['status'] == 'completed':
-                    st.success("✅ සාර්ථකයි! පහතින් කේතය බලාගන්න.")
-                    st.code(app.get('app_code', ''), language='python')
+                    st.success("✅ සාර්ථකයි! පහතින් කේතය වෙනස් කරන්න හෝ AI එකෙන් උදව් ඉල්ලන්න.")
+                    
+                    # 1. Manual Code Editor
+                    current_code = app.get('app_code', '')
+                    edited_code = st.text_area("🧑‍💻 Code Editor (ඔබට අවශ්‍ය නම් මෙහි කේතය අතින් වෙනස් කළ හැක)", value=current_code, height=350, key=f"edit_{app['id']}")
+                    
+                    if st.button("💾 Save Manual Changes", key=f"save_{app['id']}"):
+                        if edited_code != current_code:
+                            supabase.table("generated_apps").update({"app_code": edited_code}).eq("id", app['id']).execute()
+                            st.success("වෙනස්කම් සාර්ථකව Save කළා!")
+                            time.sleep(1)
+                            st.rerun()
+                            
+                    st.markdown("---")
+                    
+                    # 2. Chat with AI (Iterative Builder)
+                    st.markdown("💬 **AI එකට කියලා තව කෑලි එකතු කරගන්න**")
+                    chat_hist = app.get('chat_history') or []
+                    for msg in chat_hist:
+                        st.info(f"🧑‍💻 **ඔබ:** {msg['content']}")
+                        
+                    new_prompt = st.text_input("ඔබට අලුතින් එකතු කරගන්න/වෙනස් කරගන්න ඕන දේ මෙතන කියන්න...", placeholder="Ex: මට මේකට Login Page එකක් දාලා දෙන්න", key=f"prompt_{app['id']}")
+                    
+                    colA, colB = st.columns([1, 4])
+                    with colA:
+                        if st.button("🚀 Update with AI", key=f"ai_upd_{app['id']}", type="primary"):
+                            if new_prompt:
+                                new_hist = chat_hist + [{"role": "user", "content": new_prompt}]
+                                supabase.table("generated_apps").update({
+                                    "status": "pending",
+                                    "chat_history": new_hist,
+                                    "app_code": edited_code # අතින් කරපු වෙනස්කම් තියෙනවා නම් ඒවත් එක්කම යවනවා
+                                }).eq("id", app['id']).execute()
+                                
+                                st.success("AI එක ඔබේ අලුත් ඉල්ලීම කියවමින් පවතී! Refresh කර බලන්න.")
+                                time.sleep(2)
+                                st.rerun()
+                            else:
+                                st.warning("කරුණාකර වෙනස්කම ටයිප් කරන්න.")
+                                
                 elif app['status'] == 'failed':
                     st.error(f"❌ {app.get('app_code', 'නැවත උත්සාහ කරන්න.')}")
                 
-                if st.button("🔄 Refresh", key=f"ref_{app['id']}"):
+                if st.button("🔄 Refresh Status", key=f"ref_{app['id']}"):
                     st.rerun()
     else:
         st.info("ඔබ තවම කිසිදු ඇප් එකක් සාදා නැත.")
