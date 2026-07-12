@@ -321,7 +321,6 @@ def render_generator_dashboard():
                                     "app_code": edited_code 
                                 }).eq("id", app['id']).execute()
                                 
-                                # --- මෙන්න අර මට අමතක වෙච්ච MAGIC කෑල්ල (AI එක අවදි කිරීම)! ---
                                 if res_update.data:
                                     groq_key = st.secrets.get("GROQ_API_KEY", "").strip()
                                     gemini_key = st.secrets.get("GEMINI_KEY", "").strip()
@@ -329,7 +328,6 @@ def render_generator_dashboard():
                                     supa_service_key = st.secrets.get("SUPABASE_SERVICE_KEY", st.secrets["SUPABASE_KEY"]).strip()
                                     
                                     threading.Thread(target=process_single_app, args=(res_update.data[0], groq_key, gemini_key, supa_url, supa_service_key), daemon=True).start()
-                                # -------------------------------------------------------------
                                 
                                 st.success("AI එක ඔබේ අලුත් ඉල්ලීම කියවමින් පවතී! Refresh කර බලන්න.")
                                 time.sleep(2)
@@ -437,6 +435,41 @@ def render_god_mode():
     else:
         st.info("Users හමු නොවීය.")
 
+# --- UI: GLOBAL APP MANAGEMENT (ADMIN/OWNER ONLY) ---
+def render_admin_app_management():
+    st.markdown("### 📱 Global App Management")
+    st.write("පද්ධතියේ ඇති සියලුම යූසර්ලාගේ Apps මෙතැනින් පාලනය කළ හැක (Hide / Delete).")
+    
+    # සිස්ටම් එකේ තියෙන ඔක්කොම Apps අදිනවා
+    all_apps_res = supabase.table("generated_apps").select("*").order("created_at", desc=True).execute()
+    
+    if all_apps_res.data:
+        for app in all_apps_res.data:
+            visibility_status = "Public 👁️" if app.get('is_visible', True) else "Private 🔒"
+            with st.expander(f"📦 {app['app_name']} | Status: {app['status'].upper()} | Vis: {visibility_status}"):
+                st.write(f"**App ID:** `{app['id']}`")
+                st.write(f"**Owner ID:** `{app['owner_id']}`")
+                st.write(f"**AI Model:** {app.get('selected_model', 'N/A').upper()}")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    is_visible = app.get('is_visible', True)
+                    btn_text = "🔴 Hide from Public" if is_visible else "🟢 Make Public"
+                    if st.button(btn_text, key=f"vis_toggle_{app['id']}", use_container_width=True):
+                        supabase.table("generated_apps").update({"is_visible": not is_visible}).eq("id", app['id']).execute()
+                        st.success("Visibility යාවත්කාලීන කළා!")
+                        time.sleep(1)
+                        st.rerun()
+                        
+                with col2:
+                    if st.button("🗑️ Delete App", key=f"del_app_{app['id']}", type="primary", use_container_width=True):
+                        supabase.table("generated_apps").delete().eq("id", app['id']).execute()
+                        st.success("App එක සම්පූර්ණයෙන්ම මකා දැමුවා!")
+                        time.sleep(1)
+                        st.rerun()
+    else:
+        st.info("සිස්ටම් එකේ කිසිදු ඇප් එකක් නොමැත.")
+
 # --- UI: PAYMENT APPROVALS ---
 def render_payment_approvals():
     st.markdown("### 💰 Pending Approvals")
@@ -504,23 +537,28 @@ else:
         st.session_state.expires_at = None
         st.rerun()
 
+    # --- අලුත් Admin/Owner Navigation ---
     if st.session_state.role == 'owner':
         st.title("👑 Owner Dashboard")
-        tab1, tab2, tab3 = st.tabs(["🚀 Generator", "💰 Approvals", "⚡ God Mode (Users)"])
+        tab1, tab2, tab3, tab4 = st.tabs(["🚀 Generator", "💰 Approvals", "⚡ God Mode (Users)", "📱 Global Apps"])
         with tab1:
             render_generator_dashboard()
         with tab2:
             render_payment_approvals()
         with tab3:
             render_god_mode()
+        with tab4:
+            render_admin_app_management() # අලුත් ටැබ් එක
             
     elif st.session_state.role == 'admin':
         st.title("🛡️ Admin Dashboard")
-        tab1, tab2 = st.tabs(["🚀 Generator", "💰 Approvals"])
+        tab1, tab2, tab3 = st.tabs(["🚀 Generator", "💰 Approvals", "📱 Global Apps"])
         with tab1:
             render_generator_dashboard()
         with tab2:
             render_payment_approvals()
+        with tab3:
+            render_admin_app_management() # අලුත් ටැබ් එක
         
     elif st.session_state.role in ['user', 'moderator']:
         st.title("🚀 User Dashboard")
