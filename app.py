@@ -59,7 +59,6 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
     try:
         db.table("generated_apps").update({"status": "processing"}).eq("id", app_id).execute()
         
-        # 🧠 AI එකට මතකය දෙන Prompt එක නිර්මාණය කිරීම
         full_prompt = f"""
         You are an expert Python Streamlit developer. 
         App Name: {app_data['app_name']}
@@ -71,11 +70,9 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
         3. Do not explain the code. Just output the python script.
         """
         
-        # කලින් කේතයක් තිබ්බා නම් ඒකත් යවනවා
         if app_data.get('app_code'):
             full_prompt += f"\n\n--- CURRENT CODE ---\n{app_data['app_code']}\n"
             
-        # යූසර්ගේ අලුත් ඉල්ලීම් (Chat History) යවනවා
         chat_hist = app_data.get('chat_history') or []
         if chat_hist:
             full_prompt += "\n--- REQUESTED CHANGES (APPLY THESE TO CURRENT CODE) ---\n"
@@ -246,7 +243,7 @@ def render_generator_dashboard():
                 "is_visible": not is_private, 
                 "status": "pending",
                 "selected_model": selected_model,
-                "chat_history": [] # අලුත් ටේබල් Column එක
+                "chat_history": [] 
             }).execute()
             
             if res.data:
@@ -275,22 +272,38 @@ def render_generator_dashboard():
                 elif app['status'] == 'processing':
                     st.warning("⚙️ AI එක මගින් කේතය ලියමින් පවතී... (කරුණාකර මඳ වේලාවකින් Refresh කරන්න)")
                 elif app['status'] == 'completed':
-                    st.success("✅ සාර්ථකයි! පහතින් කේතය වෙනස් කරන්න හෝ AI එකෙන් උදව් ඉල්ලන්න.")
+                    st.success("✅ සාර්ථකයි! පහතින් කේතය වෙනස් කරන්න, Preview බලන්න හෝ AI එකෙන් උදව් ඉල්ලන්න.")
                     
-                    # 1. Manual Code Editor
                     current_code = app.get('app_code', '')
-                    edited_code = st.text_area("🧑‍💻 Code Editor (ඔබට අවශ්‍ය නම් මෙහි කේතය අතින් වෙනස් කළ හැක)", value=current_code, height=350, key=f"edit_{app['id']}")
                     
-                    if st.button("💾 Save Manual Changes", key=f"save_{app['id']}"):
-                        if edited_code != current_code:
-                            supabase.table("generated_apps").update({"app_code": edited_code}).eq("id", app['id']).execute()
-                            st.success("වෙනස්කම් සාර්ථකව Save කළා!")
-                            time.sleep(1)
-                            st.rerun()
-                            
+                    # --- MAGIC: TABS FOR CODE & LIVE PREVIEW ---
+                    tab_code, tab_preview = st.tabs(["🧑‍💻 Code Editor", "👁️ Live Preview"])
+                    
+                    with tab_code:
+                        edited_code = st.text_area("මෙහි කේතය අතින් වෙනස් කළ හැක:", value=current_code, height=350, key=f"edit_{app['id']}")
+                        if st.button("💾 Save Manual Changes", key=f"save_{app['id']}"):
+                            if edited_code != current_code:
+                                supabase.table("generated_apps").update({"app_code": edited_code}).eq("id", app['id']).execute()
+                                st.success("වෙනස්කම් සාර්ථකව Save කළා!")
+                                time.sleep(1)
+                                st.rerun()
+                                
+                    with tab_preview:
+                        st.info("💡 පහත බොත්තම ඔබා ඔබගේ ඇප් එකේ පෙරදසුනක් (Live Preview) මෙතනම බලාගන්න.")
+                        if st.button("▶️ Run Preview", key=f"run_{app['id']}", type="primary"):
+                            try:
+                                # ආරක්ෂාව සඳහා සහ Crash වීම වැළැක්වීමට st.set_page_config අයින් කරමු
+                                safe_code = "\n".join([line for line in current_code.split('\n') if 'st.set_page_config' not in line])
+                                
+                                st.markdown("### 📱 Live App Demo")
+                                with st.container(border=True):
+                                    exec(safe_code, globals(), {})
+                            except Exception as e:
+                                st.error(f"Preview එක Run කිරීමේදී දෝෂයක්: {e}")
+                                
                     st.markdown("---")
                     
-                    # 2. Chat with AI (Iterative Builder)
+                    # --- CHAT TO BUILD INTERFACE ---
                     st.markdown("💬 **AI එකට කියලා තව කෑලි එකතු කරගන්න**")
                     chat_hist = app.get('chat_history') or []
                     for msg in chat_hist:
@@ -306,7 +319,7 @@ def render_generator_dashboard():
                                 supabase.table("generated_apps").update({
                                     "status": "pending",
                                     "chat_history": new_hist,
-                                    "app_code": edited_code # අතින් කරපු වෙනස්කම් තියෙනවා නම් ඒවත් එක්කම යවනවා
+                                    "app_code": edited_code 
                                 }).eq("id", app['id']).execute()
                                 
                                 st.success("AI එක ඔබේ අලුත් ඉල්ලීම කියවමින් පවතී! Refresh කර බලන්න.")
