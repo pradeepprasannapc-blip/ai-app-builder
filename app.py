@@ -12,9 +12,9 @@ from google import genai
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="AI App Factory - Master Core", layout="wide")
 
-# --- SUPABASE SETUP ---
-SUPABASE_URL = st.secrets["SUPABASE_URL"]
-SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+# --- SUPABASE SETUP (FRONTEND) ---
+SUPABASE_URL = st.secrets["SUPABASE_URL"].strip()
+SUPABASE_KEY = st.secrets["SUPABASE_KEY"].strip()
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # --- SESSION STATE ---
@@ -52,8 +52,9 @@ def trigger_social_proof():
         st.session_state.show_toast = False 
 
 # --- AI GENERATOR ENGINE (BULLETPROOF WORKER) ---
-def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_key):
-    db = create_client(supa_url, supa_key)
+def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_key):
+    # මෙතන පාවිච්චි කරන්නේ Service Role Key එකයි! (Super Admin බලය)
+    db = create_client(supa_url, supa_service_key)
     app_id = app_data['id']
     
     try:
@@ -91,22 +92,28 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_key):
         db.table("generated_apps").update({"status": "completed", "app_code": generated_code}).eq("id", app_id).execute()
         
     except Exception as e:
-        # MAGIC: AI එක කැඩුනොත් දෝෂය කෙලින්ම Database එකට දානවා!
+        # දෝෂය කෙලින්ම Database එකට දානවා (UI එකේ රතු පාටින් පෙන්වන්න)
         error_msg = f"API Error: {str(e)}"
         db.table("generated_apps").update({"status": "failed", "app_code": error_msg}).eq("id", app_id).execute()
+        print(f"Worker Error on {app_id}: {e}")
 
 def background_recovery_worker():
     try:
-        groq_key = st.secrets.get("GROQ_API_KEY", "")
-        gemini_key = st.secrets.get("GEMINI_API_KEY", "")
-        db = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
+        # MAGIC: .strip() පාවිච්චි කරලා හැංගිච්ච spaces අයින් කරනවා, වගේම නිවැරදි කී වල නම් භාවිතා කරනවා!
+        groq_key = st.secrets.get("GROQ_API_KEY", "").strip()
+        gemini_key = st.secrets.get("GEMINI_KEY", "").strip() # මෙන්න Gemini කී එක හැදුවා!
+        
+        supa_url = st.secrets["SUPABASE_URL"].strip()
+        supa_service_key = st.secrets.get("SUPABASE_SERVICE_KEY", st.secrets["SUPABASE_KEY"]).strip()
+        
+        db = create_client(supa_url, supa_service_key)
         
         pending_apps = db.table("generated_apps").select("*").eq("status", "pending").execute()
         
         for app in pending_apps.data:
-            process_single_app(app, groq_key, gemini_key, st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
-    except Exception:
-        pass
+            process_single_app(app, groq_key, gemini_key, supa_url, supa_service_key)
+    except Exception as e:
+        print(f"Recovery Worker Failed: {e}")
 
 if not st.session_state.worker_started:
     threading.Thread(target=background_recovery_worker, daemon=True).start()
@@ -156,13 +163,18 @@ def login(email, password):
             
             st.rerun()
     except Exception as e:
-        st.error("⚠️ Email හෝ Password වැරදියි.")
+        if "Invalid login credentials" in str(e):
+            st.error("⚠️ Email හෝ Password වැරදියි.")
+        else:
+            st.error(f"⚠️ දෝෂයකි: {str(e)}")
 
 def register(email, password):
     try:
         res = supabase.auth.sign_up({"email": email, "password": password})
         if res.user:
             st.success("🎉 ලියාපදිංචිය සාර්ථකයි! කරුණාකර ඔබගේ Email එකට ගොස් ගිණුම Verify කරන්න.")
+        else:
+            st.error("ලියාපදිංචි වීමේ දෝෂයකි.")
     except Exception as e:
         st.error(f"Error: {e}")
 
@@ -224,9 +236,13 @@ def render_generator_dashboard():
             }).execute()
             
             if res.data:
-                groq_key = st.secrets.get("GROQ_API_KEY", "")
-                gemini_key = st.secrets.get("GEMINI_API_KEY", "")
-                threading.Thread(target=process_single_app, args=(res.data[0], groq_key, gemini_key, st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"]), daemon=True).start()
+                # MAGIC: කී වල හිස්තැන් කපලා අරගන්නවා (සහ Service Role කී එක පාවිච්චි කරනවා)
+                groq_key = st.secrets.get("GROQ_API_KEY", "").strip()
+                gemini_key = st.secrets.get("GEMINI_KEY", "").strip()
+                supa_url = st.secrets["SUPABASE_URL"].strip()
+                supa_service_key = st.secrets.get("SUPABASE_SERVICE_KEY", st.secrets["SUPABASE_KEY"]).strip()
+                
+                threading.Thread(target=process_single_app, args=(res.data[0], groq_key, gemini_key, supa_url, supa_service_key), daemon=True).start()
                 st.success(f"✅ ඔබගේ ඇප් එක {selected_model.upper()} AI මගින් පෝලිමට එක් කරන ලදී! පසුව පැමිණ තත්ත්වය පරීක්ෂා කරන්න.")
                 time.sleep(2)
                 st.rerun()
@@ -249,8 +265,8 @@ def render_generator_dashboard():
                     st.success("✅ සාර්ථකයි! පහතින් කේතය බලාගන්න.")
                     st.code(app.get('app_code', ''), language='python')
                 elif app['status'] == 'failed':
-                    # මෙතනින් අපිට Error එක බලාගන්න පුළුවන්
-                    st.error(f"❌ දෝෂයකි: {app.get('app_code', 'නැවත උත්සාහ කරන්න.')}")
+                    # දැන් Error එක කෙලින්ම මෙතන රතු පාටින් පෙන්නනවා
+                    st.error(f"❌ {app.get('app_code', 'නැවත උත්සාහ කරන්න.')}")
                 
                 if st.button("🔄 Refresh", key=f"ref_{app['id']}"):
                     st.rerun()
