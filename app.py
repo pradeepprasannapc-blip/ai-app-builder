@@ -84,7 +84,8 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
             client = groq.Groq(api_key=groq_key)
             chat_completion = client.chat.completions.create(
                 messages=[{"role": "user", "content": prompt}],
-                model="llama-3.1-70b-versatile", # <-- අලුත් Groq මොඩල් එක මෙතන තියෙනවා
+                # මෙන්න අලුත්ම සහ ස්ථාවර Groq මොඩල් එක
+                model="mixtral-8x7b-32768", 
             )
             generated_code = chat_completion.choices[0].message.content
             
@@ -99,7 +100,6 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
 
 def background_recovery_worker():
     try:
-        # MAGIC: .strip() පාවිච්චි කරලා හැංගිච්ච spaces අයින් කරනවා, වගේම නිවැරදි කී වල නම් භාවිතා කරනවා!
         groq_key = st.secrets.get("GROQ_API_KEY", "").strip()
         gemini_key = st.secrets.get("GEMINI_KEY", "").strip() 
         
