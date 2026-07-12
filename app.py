@@ -59,6 +59,7 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
     try:
         db.table("generated_apps").update({"status": "processing"}).eq("id", app_id).execute()
         
+        # අලුත් ආරක්ෂිත Prompt එක
         full_prompt = f"""
         You are an expert Python Streamlit developer. 
         App Name: {app_data['app_name']}
@@ -68,6 +69,7 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
         1. Use visually appealing Streamlit UI components (columns, expanders, etc.).
         2. Output ONLY the raw Python code. Do not include markdown formatting like ```python.
         3. Do not explain the code. Just output the python script.
+        4. IMPORTANT: Do NOT use non-existent Streamlit commands like `st.footer()`. Stick only to standard, valid Streamlit API methods.
         """
         
         if app_data.get('app_code'):
@@ -276,7 +278,6 @@ def render_generator_dashboard():
                     
                     current_code = app.get('app_code', '')
                     
-                    # --- MAGIC: TABS FOR CODE & LIVE PREVIEW ---
                     tab_code, tab_preview = st.tabs(["🧑‍💻 Code Editor", "👁️ Live Preview"])
                     
                     with tab_code:
@@ -292,8 +293,8 @@ def render_generator_dashboard():
                         st.info("💡 පහත බොත්තම ඔබා ඔබගේ ඇප් එකේ පෙරදසුනක් (Live Preview) මෙතනම බලාගන්න.")
                         if st.button("▶️ Run Preview", key=f"run_{app['id']}", type="primary"):
                             try:
-                                # ආරක්ෂාව සඳහා සහ Crash වීම වැළැක්වීමට st.set_page_config අයින් කරමු
-                                safe_code = "\n".join([line for line in current_code.split('\n') if 'st.set_page_config' not in line])
+                                # Magic 2: st.set_page_config සහ st.footer වගේ අවුල් කමාන්ඩ් ටික අයින් කරමු!
+                                safe_code = "\n".join([line for line in current_code.split('\n') if 'st.set_page_config' not in line and 'st.footer' not in line])
                                 
                                 st.markdown("### 📱 Live App Demo")
                                 with st.container(border=True):
