@@ -11,6 +11,9 @@ from google import genai
 import re
 import urllib.parse
 import pg8000.native 
+import io
+import zipfile
+import requests 
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="AI App Factory - Master Core", layout="wide")
@@ -19,6 +22,35 @@ st.set_page_config(page_title="AI App Factory - Master Core", layout="wide")
 SUPABASE_URL = st.secrets["SUPABASE_URL"].strip()
 SUPABASE_KEY = st.secrets["SUPABASE_KEY"].strip()
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# --- AUTO-UPDATE DATABASE SCHEMA ---
+# MAGIC: Supabase එකට අතින් Columns දාන එක නවත්තලා, ඔටෝම Update වෙන කෑල්ල!
+def init_database_schema():
+    try:
+        db_url = st.secrets.get("DATABASE_URL", "").strip()
+        if db_url:
+            parsed = urllib.parse.urlparse(db_url)
+            db_pass = urllib.parse.unquote(parsed.password) if parsed.password else None
+            conn = pg8000.native.Connection(
+                user=parsed.username,
+                password=db_pass,
+                host=parsed.hostname,
+                port=parsed.port or 5432,
+                database=parsed.path.lstrip('/')
+            )
+            # අලුත් තීරු 3 නැත්නම් විතරක් ඔටෝම එකතු කරයි (IF NOT EXISTS)
+            conn.run("ALTER TABLE generated_apps ADD COLUMN IF NOT EXISTS android_version TEXT;")
+            conn.run("ALTER TABLE generated_apps ADD COLUMN IF NOT EXISTS app_icon_url TEXT;")
+            conn.run("ALTER TABLE generated_apps ADD COLUMN IF NOT EXISTS icon_prompt TEXT;")
+            
+            # API එකේ මතකය අලුත් කිරීම
+            conn.run("NOTIFY pgrst, 'reload schema'")
+            conn.close()
+    except Exception as e:
+        print("Auto DB Schema Update Error:", e)
+
+# ඇප් එක ලෝඩ් වෙද්දී හැමතිස්සෙම මේක චෙක් කරනවා
+init_database_schema()
 
 # --- SESSION STATE ---
 if 'user' not in st.session_state:
@@ -122,7 +154,7 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
         App Name: {app_data['app_name']}
         App Idea / Reference: {app_data['source_link']}
         
-        CRITICAL RULES (FOLLOW OR SYSTEM WILL CRASH):
+        CRITICAL RULES:
         1. OUTPUT PURE PYTHON CODE ONLY. NO markdown formatting.
         2. NO introductory text. Start immediately with 'import streamlit as st'.
         3. STRICT PYTHON INDENTATION (4 spaces per level).
@@ -133,8 +165,6 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
            supabase: Client = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
         5. UNIQUE KEYS (CRITICAL): EVERY `st.text_input`, `st.button`, `st.text_area` MUST have a globally unique `key=` argument. 
            EXCEPTION FOR st.form: The first positional argument of st.form IS the key. NEVER use `key=` inside st.form. 
-           Correct: `with st.form("unique_form_name"):` 
-           Wrong (CRASHES): `with st.form("form_name", key="unique_key"):`
         6. STREAMLIT ANTI-PATTERNS (CRITICAL): NEVER nest `st.form` inside an `if st.button():` block. Forms will disappear on submit. Use `st.tabs` or `st.session_state` to switch views.
         """
         
@@ -281,6 +311,18 @@ def render_generator_dashboard():
 
     app_name = st.text_input("App එකේ නම", placeholder="Ex: My Awesome App")
     
+    col_a, col_b = st.columns(2)
+    with col_a:
+        android_version = st.selectbox("Android Version එක තෝරන්න:", 
+                                       ["Android 8.0 (Oreo)", "Android 9.0 (Pie)", "Android 10.0", 
+                                        "Android 11.0", "Android 12.0", "Android 13.0", "Android 14.0", "Android 15.0"])
+    with col_b:
+        app_icon = st.file_uploader("App Logo එකක් තෝරන්න (Optional):", type=['png', 'jpg', 'jpeg'])
+
+    icon_prompt = st.text_input("අයිකන් එකේ මොනවද තියෙන්න ඕනේ කියලා AI එකට කියන්න (උදා: නිල් පාට පොතක්):", placeholder="Optional: Leave blank if you uploaded an icon")
+    
+    st.markdown("---")
+
     col1, col2 = st.columns(2)
     with col1:
         upload_option = st.radio("App එක ගැන විස්තරය ලබා දෙන ආකාරය:", ["✍️ විස්තරයක් (Prompt) හෝ ලින්ක් එකක් දීම", "📁 File එකක් Upload කිරීම"], horizontal=True)
@@ -300,11 +342,19 @@ def render_generator_dashboard():
     if st.button("🚀 Generate App", use_container_width=True, type="primary"):
         if app_name and (source_link or uploaded_file):
             final_source_link = source_link
+            
             if upload_option == "📁 File එකක් Upload කිරීම" and uploaded_file:
-                with st.spinner("☁️ Uploading..."):
+                with st.spinner("☁️ App Source File Uploading..."):
                     file_path = f"{st.session_state.user.id}/{int(time.time())}_{uploaded_file.name}"
                     supabase.storage.from_("app_sources").upload(file_path, uploaded_file.getvalue())
                     final_source_link = supabase.storage.from_("app_sources").get_public_url(file_path)
+
+            icon_url = ""
+            if app_icon:
+                with st.spinner("☁️ Icon Uploading..."):
+                    icon_path = f"{st.session_state.user.id}/icons/{int(time.time())}_{app_icon.name}"
+                    supabase.storage.from_("app_sources").upload(icon_path, app_icon.getvalue())
+                    icon_url = supabase.storage.from_("app_sources").get_public_url(icon_path)
 
             res = supabase.table("generated_apps").insert({
                 "owner_id": st.session_state.user.id, 
@@ -313,7 +363,10 @@ def render_generator_dashboard():
                 "is_visible": not is_private, 
                 "status": "pending",
                 "selected_model": selected_model,
-                "chat_history": [] 
+                "chat_history": [],
+                "android_version": android_version,
+                "app_icon_url": icon_url,
+                "icon_prompt": icon_prompt
             }).execute()
             
             if res.data:
@@ -339,6 +392,10 @@ def render_generator_dashboard():
             with st.expander(f"📦 {app_name_safe} - Status: {status_str}"):
                 st.write(f"**Source:** {app.get('source_link', 'N/A')}")
                 
+                ver = app.get('android_version')
+                if ver:
+                    st.caption(f"🤖 Android Target: {ver}")
+                
                 if status_str == 'PENDING':
                     st.info("⏳ පෝලිමේ ඇත...")
                 elif status_str == 'PROCESSING':
@@ -348,7 +405,7 @@ def render_generator_dashboard():
                     
                     current_code = app.get('app_code', '')
                     
-                    tab_code, tab_preview, tab_history = st.tabs(["🧑‍💻 Code Editor", "👁️ Live Preview", "⏪ Version History"])
+                    tab_code, tab_preview, tab_history, tab_export = st.tabs(["🧑‍💻 Code Editor", "👁️ Live Preview", "⏪ Version History", "📥 Export App"])
                     
                     with tab_code:
                         edited_code = st.text_area("මෙහි කේතය අතින් වෙනස් කළ හැක:", value=current_code, height=350, key=f"edit_{app['id']}")
@@ -403,6 +460,67 @@ def render_generator_dashboard():
                                 st.info("පෙර සංස්කරණ කිසිවක් හමු නොවීය.")
                         except Exception as e:
                             st.error("Versions ලබාගැනීමේ දෝෂයක්.")
+                    
+                    with tab_export:
+                        st.markdown("### 📦 Download Your App")
+                        st.write("ඔබගේ ඇප් එක මෙතැනින් ලබාගත හැක.")
+
+                        colA, colB = st.columns(2)
+                        with colA:
+                            st.info("📱 **Android APK**\n\nApp එකේ Android සංස්කරණය.")
+                            if st.button("Build & Download APK", key=f"apk_{app['id']}", use_container_width=True):
+                                try:
+                                    github_token = st.secrets.get("GITHUB_TOKEN", "")
+                                    github_repo = st.secrets.get("GITHUB_REPO", "") 
+                                    
+                                    if not github_token or not github_repo:
+                                        st.error("⚠️ කරුණාකර Streamlit Secrets වල `GITHUB_TOKEN` සහ `GITHUB_REPO` සකසන්න.")
+                                    else:
+                                        with st.spinner("🚀 GitHub Action එක Trigger කරමින් පවතී..."):
+                                            headers = {
+                                                "Accept": "application/vnd.github.v3+json",
+                                                "Authorization": f"token {github_token}"
+                                            }
+                                            
+                                            payload = {
+                                                "event_type": "build_apk",
+                                                "client_payload": {
+                                                    "app_id": app['id'],
+                                                    "app_name": app_name_safe,
+                                                    "app_code": current_code,
+                                                    "android_version": app.get('android_version', 'Android 10.0'),
+                                                    "app_icon_url": app.get('app_icon_url', ''),
+                                                    "icon_prompt": app.get('icon_prompt', '')
+                                                }
+                                            }
+                                            res = requests.post(f"[https://api.github.com/repos/](https://api.github.com/repos/){github_repo}/dispatches", json=payload, headers=headers)
+                                            
+                                            if res.status_code == 204:
+                                                st.success("✅ APK Build කිරීම සාර්ථකව ආරම්භ විය! විනාඩි කිහිපයකින් GitHub Actions හි ප්‍රතිඵලය පරීක්ෂා කරන්න.")
+                                            else:
+                                                st.error(f"❌ GitHub Action එක ආරම්භ කිරීම අසාර්ථකයි: {res.text}")
+                                except Exception as gh_err:
+                                    st.error(f"Error: {gh_err}")
+
+                        with colB:
+                            st.warning("🗂️ **Source Code (ZIP)**\n\nසම්පූර්ණ කේතය (Gold Package පමණි).")
+                            if st.session_state.package == 'gold':
+                                zip_buffer = io.BytesIO()
+                                with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
+                                    zip_file.writestr("app.py", current_code)
+                                    req_txt = "streamlit\nsupabase\npg8000\n"
+                                    zip_file.writestr("requirements.txt", req_txt)
+                                
+                                st.download_button(
+                                    label="Download ZIP",
+                                    data=zip_buffer.getvalue(),
+                                    file_name=f"{app_name_safe.replace(' ', '_')}.zip",
+                                    mime="application/zip",
+                                    key=f"zip_{app['id']}",
+                                    use_container_width=True
+                                )
+                            else:
+                                st.error("🔒 Source Code ලබා ගැනීම සඳහා Gold Package එකට Upgrade කරන්න.")
                                 
                     st.markdown("---")
                     
@@ -470,7 +588,7 @@ def render_upgrade_section():
     with col1:
         st.info(f"**🥈 Silver Package**\n\n- Apps 10ක් සෑදිය හැක.\n- ⏳ **වලංගු කාලය: දින 30යි**\n- Price: ~~Rs. {silver_orig}~~ **Rs. {pricing['silver_price']}**\n- 💸 ඔබ රු. {silver_save} ක් ඉතිරි කරයි! ({pricing['silver_discount_pct']}% OFF)")
     with col2:
-        st.warning(f"**🥇 Gold Package**\n\n- අසීමිත Apps.\n- ⏳ **වලංගු කාලය: දින 30යි**\n- Price: ~~Rs. {gold_orig}~~ **Rs. {pricing['gold_price']}**\n- 💸 ඔබ රු. {gold_save} ක් ඉතිරි කරයි! ({pricing['gold_discount_pct']}% OFF)")
+        st.warning(f"**🥇 Gold Package**\n\n- අසීමිත Apps.\n- 🗂️ **Source Code (ZIP) Download කිරීමේ පහසුකම.**\n- ⏳ **වලංගු කාලය: දින 30යි**\n- Price: ~~Rs. {gold_orig}~~ **Rs. {pricing['gold_price']}**\n- 💸 ඔබ රු. {gold_save} ක් ඉතිරි කරයි! ({pricing['gold_discount_pct']}% OFF)")
         
     st.markdown("---")
     with st.form("payment_form"):
