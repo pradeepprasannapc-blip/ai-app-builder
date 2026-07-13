@@ -109,20 +109,25 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
                     database=parsed.path.lstrip('/')
                 )
                 conn.run(db_schema_sql)
+                
+                # MAGIC: Supabase එකේ මතකය (Cache) අලුත් කිරීම! (Cache Reloading)
+                conn.run("NOTIFY pgrst, 'reload schema'")
+                
                 conn.close()
-                print(f"✅ Auto DB Tables Created for App: {app_id}")
+                time.sleep(2) # Cache එක අප්ඩේට් වෙන්න තත්පර 2ක් දෙනවා
+                print(f"✅ Auto DB Tables Created and Cache Reloaded for App: {app_id}")
             except Exception as dbe:
                 print(f"⚠️ DB Creation Error: {dbe}")
                 
         # ==========================================
-        # 🧠 BRAIN 2: FRONTEND DEVELOPER AI (ADVANCED STREAMLIT RULES)
+        # 🧠 BRAIN 2: FRONTEND DEVELOPER AI
         # ==========================================
         full_prompt = f"""
         You are an elite, highly precise Python Streamlit developer.
         App Name: {app_data['app_name']}
         App Idea / Reference: {app_data['source_link']}
         
-        CRITICAL RULES (FOLLOW OR SYSTEM WILL CRASH):
+        CRITICAL RULES:
         1. OUTPUT PURE PYTHON CODE ONLY. NO markdown formatting (DO NOT use ```python or ```).
         2. NO introductory text. Start immediately with 'import streamlit as st'.
         3. ABSOLUTELY NO sqlite3. You are FORBIDDEN from using sqlite3. If data storage is required, you MUST use the `supabase` Python library.
@@ -131,7 +136,7 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
            import streamlit as st
            supabase: Client = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
         4. STREAMLIT ANTI-PATTERNS (CRITICAL): NEVER nest `st.form` inside an `if st.button():` block. When a form submit button is clicked, the app reruns and the outer button evaluates to False, causing the form to disappear!
-           Instead, use `st.tabs`, `st.radio`, or `st.session_state` to switch between views (e.g., Login vs Signup tabs).
+           Instead, use `st.tabs`, `st.radio`, or `st.session_state` to switch between views.
         5. SUPABASE SYNTAX: Use `supabase.table("table_name").insert({{"column": "value"}}).execute()`.
         6. STRICT PYTHON INDENTATION (4 spaces per level).
         7. NEVER use non-existent Streamlit commands like `st.footer()`.
@@ -281,7 +286,7 @@ def render_generator_dashboard():
         st.error("⚠️ උපරිම සීමාවට පැමිණ ඇත. තවත් Apps සෑදීමට කරුණාකර Upgrade කරන්න.")
         return 
 
-    app_name = st.text_input("App එකේ නම", placeholder="Ex: E-commerce Product Manager")
+    app_name = st.text_input("App එකේ නම", placeholder="Ex: My Awesome App")
     
     col1, col2 = st.columns(2)
     with col1:
