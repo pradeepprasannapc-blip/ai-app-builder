@@ -115,14 +115,14 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
                 print(f"⚠️ DB Creation Error: {dbe}")
                 
         # ==========================================
-        # 🧠 BRAIN 2: FRONTEND DEVELOPER AI (STRICT DB RULES ADDED)
+        # 🧠 BRAIN 2: FRONTEND DEVELOPER AI (ADVANCED STREAMLIT RULES)
         # ==========================================
         full_prompt = f"""
         You are an elite, highly precise Python Streamlit developer.
         App Name: {app_data['app_name']}
         App Idea / Reference: {app_data['source_link']}
         
-        CRITICAL RULES:
+        CRITICAL RULES (FOLLOW OR SYSTEM WILL CRASH):
         1. OUTPUT PURE PYTHON CODE ONLY. NO markdown formatting (DO NOT use ```python or ```).
         2. NO introductory text. Start immediately with 'import streamlit as st'.
         3. ABSOLUTELY NO sqlite3. You are FORBIDDEN from using sqlite3. If data storage is required, you MUST use the `supabase` Python library.
@@ -130,8 +130,11 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
            from supabase import create_client, Client
            import streamlit as st
            supabase: Client = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
-        4. STRICT PYTHON INDENTATION (4 spaces per level).
-        5. NEVER use non-existent Streamlit commands like `st.footer()`.
+        4. STREAMLIT ANTI-PATTERNS (CRITICAL): NEVER nest `st.form` inside an `if st.button():` block. When a form submit button is clicked, the app reruns and the outer button evaluates to False, causing the form to disappear!
+           Instead, use `st.tabs`, `st.radio`, or `st.session_state` to switch between views (e.g., Login vs Signup tabs).
+        5. SUPABASE SYNTAX: Use `supabase.table("table_name").insert({{"column": "value"}}).execute()`.
+        6. STRICT PYTHON INDENTATION (4 spaces per level).
+        7. NEVER use non-existent Streamlit commands like `st.footer()`.
         """
         
         if db_schema_sql and "NO_DB" not in db_schema_sql.upper():
@@ -278,9 +281,8 @@ def render_generator_dashboard():
         st.error("⚠️ උපරිම සීමාවට පැමිණ ඇත. තවත් Apps සෑදීමට කරුණාකර Upgrade කරන්න.")
         return 
 
-    app_name = st.text_input("App එකේ නම", placeholder="Ex: My Awesome App")
+    app_name = st.text_input("App එකේ නම", placeholder="Ex: E-commerce Product Manager")
     
-    # MAGIC: අලුත් UI Wording එක
     col1, col2 = st.columns(2)
     with col1:
         upload_option = st.radio("App එක ගැන විස්තරය ලබා දෙන ආකාරය:", ["✍️ විස්තරයක් (Prompt) හෝ ලින්ක් එකක් දීම", "📁 File එකක් Upload කිරීම"], horizontal=True)
@@ -291,7 +293,6 @@ def render_generator_dashboard():
     source_link = ""
     uploaded_file = None
     if upload_option == "✍️ විස්තරයක් (Prompt) හෝ ලින්ක් එකක් දීම":
-        # MAGIC: Text input එක වෙනුවට Text Area එකක් දැම්මා
         source_link = st.text_area("ඔබේ අදහස (Prompt) හෝ වෙබ් ලින්ක් එක මෙහි ටයිප් කරන්න:", height=100, placeholder="උදා: මට සරල Todo List එකක් හදලා දෙන්න. ඒකේ Tasks ටික Database එකේ සේව් වෙන්න ඕනේ...")
     else:
         uploaded_file = st.file_uploader("File එක තෝරන්න", type=['zip', 'txt', 'py'])
