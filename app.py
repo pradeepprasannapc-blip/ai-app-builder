@@ -107,7 +107,6 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
                     database=parsed.path.lstrip('/')
                 )
                 conn.run(db_schema_sql)
-                # Cache Reload
                 conn.run("NOTIFY pgrst, 'reload schema'")
                 conn.close()
                 time.sleep(2) 
@@ -132,9 +131,10 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
            from supabase import create_client, Client
            import streamlit as st
            supabase: Client = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
-        5. UNIQUE KEYS (CRITICAL): EVERY `st.text_input`, `st.button`, `st.text_area`, `st.form` MUST have a globally unique `key` argument. 
-           Example: st.text_input("Title", key="unique_task_title_input_123")
-           NEVER use generic inputs without unique keys. This prevents DuplicateWidgetID errors.
+        5. UNIQUE KEYS (CRITICAL): EVERY `st.text_input`, `st.button`, `st.text_area` MUST have a globally unique `key=` argument. 
+           EXCEPTION FOR st.form: The first positional argument of st.form IS the key. NEVER use `key=` inside st.form. 
+           Correct: `with st.form("unique_form_name"):` 
+           Wrong (CRASHES): `with st.form("form_name", key="unique_key"):`
         6. STREAMLIT ANTI-PATTERNS (CRITICAL): NEVER nest `st.form` inside an `if st.button():` block. Forms will disappear on submit. Use `st.tabs` or `st.session_state` to switch views.
         """
         
@@ -406,7 +406,6 @@ def render_generator_dashboard():
                                 
                     st.markdown("---")
                     
-                    # MAGIC: ආපහු එකතු කරපු CHAT FUNCTION එක
                     st.markdown("💬 **AI එකට කියලා තව කෑලි එකතු කරගන්න**")
                     chat_hist = app.get('chat_history') or []
                     for msg in chat_hist:
