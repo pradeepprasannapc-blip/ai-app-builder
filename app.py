@@ -98,9 +98,7 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
             try:
                 db_url = st.secrets["DATABASE_URL"].strip()
                 parsed = urllib.parse.urlparse(db_url)
-                
                 db_pass = urllib.parse.unquote(parsed.password) if parsed.password else None
-                
                 conn = pg8000.native.Connection(
                     user=parsed.username,
                     password=db_pass,
@@ -109,13 +107,11 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
                     database=parsed.path.lstrip('/')
                 )
                 conn.run(db_schema_sql)
-                
-                # MAGIC: Supabase එකේ මතකය (Cache) අලුත් කිරීම! (Cache Reloading)
+                # Cache Reload
                 conn.run("NOTIFY pgrst, 'reload schema'")
-                
                 conn.close()
-                time.sleep(2) # Cache එක අප්ඩේට් වෙන්න තත්පර 2ක් දෙනවා
-                print(f"✅ Auto DB Tables Created and Cache Reloaded for App: {app_id}")
+                time.sleep(2) 
+                print(f"✅ Auto DB Tables Created for App: {app_id}")
             except Exception as dbe:
                 print(f"⚠️ DB Creation Error: {dbe}")
                 
@@ -127,23 +123,23 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
         App Name: {app_data['app_name']}
         App Idea / Reference: {app_data['source_link']}
         
-        CRITICAL RULES:
-        1. OUTPUT PURE PYTHON CODE ONLY. NO markdown formatting (DO NOT use ```python or ```).
+        CRITICAL RULES (FOLLOW OR SYSTEM WILL CRASH):
+        1. OUTPUT PURE PYTHON CODE ONLY. NO markdown formatting.
         2. NO introductory text. Start immediately with 'import streamlit as st'.
-        3. ABSOLUTELY NO sqlite3. You are FORBIDDEN from using sqlite3. If data storage is required, you MUST use the `supabase` Python library.
+        3. STRICT PYTHON INDENTATION (4 spaces per level).
+        4. ABSOLUTELY NO sqlite3. Use `supabase` library ONLY to insert/select data.
            Use this EXACT code to connect to the database:
            from supabase import create_client, Client
            import streamlit as st
            supabase: Client = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
-        4. STREAMLIT ANTI-PATTERNS (CRITICAL): NEVER nest `st.form` inside an `if st.button():` block. When a form submit button is clicked, the app reruns and the outer button evaluates to False, causing the form to disappear!
-           Instead, use `st.tabs`, `st.radio`, or `st.session_state` to switch between views.
-        5. SUPABASE SYNTAX: Use `supabase.table("table_name").insert({{"column": "value"}}).execute()`.
-        6. STRICT PYTHON INDENTATION (4 spaces per level).
-        7. NEVER use non-existent Streamlit commands like `st.footer()`.
+        5. UNIQUE KEYS (CRITICAL): EVERY `st.text_input`, `st.button`, `st.text_area`, `st.form` MUST have a globally unique `key` argument. 
+           Example: st.text_input("Title", key="unique_task_title_input_123")
+           NEVER use generic inputs without unique keys. This prevents DuplicateWidgetID errors.
+        6. STREAMLIT ANTI-PATTERNS (CRITICAL): NEVER nest `st.form` inside an `if st.button():` block. Forms will disappear on submit. Use `st.tabs` or `st.session_state` to switch views.
         """
         
         if db_schema_sql and "NO_DB" not in db_schema_sql.upper():
-            full_prompt += f"\n\nDATABASE EXISTS: The following PostgreSQL tables are already created in Supabase. You MUST insert/select data from these tables using the `supabase` python client initialized above:\n{db_schema_sql}\n"
+            full_prompt += f"\n\nDATABASE EXISTS. You MUST use this schema: \n{db_schema_sql}\n"
             
         if app_data.get('app_code'):
             full_prompt += f"\n\n--- CURRENT CODE ---\n{app_data['app_code']}\n"
@@ -211,9 +207,7 @@ def login(email, password):
     try:
         res = supabase.auth.sign_in_with_password({"email": email, "password": password})
         user_id = res.user.id
-        
         user_data = supabase.table("users").select("role, status, package, expires_at").eq("id", user_id).execute()
-        
         if user_data.data:
             if user_data.data[0]['status'] == 'banned':
                 st.error("🚫 ඔබේ ගිණුම තහනම් කර ඇත!")
@@ -247,7 +241,6 @@ def login(email, password):
                 "ip_address": get_user_ip(),
                 "country": "Sri Lanka"
             }).execute()
-            
             st.rerun()
     except Exception as e:
         if "Invalid login credentials" in str(e):
@@ -328,7 +321,6 @@ def render_generator_dashboard():
                 gemini_key = st.secrets.get("GEMINI_KEY", "").strip()
                 supa_url = st.secrets["SUPABASE_URL"].strip()
                 supa_service_key = st.secrets.get("SUPABASE_SERVICE_KEY", st.secrets["SUPABASE_KEY"]).strip()
-                
                 threading.Thread(target=process_single_app, args=(res.data[0], groq_key, gemini_key, supa_url, supa_service_key), daemon=True).start()
                 st.success(f"✅ ඔබගේ ඇප් එක {selected_model.upper()} AI මගින් පෝලිමට එක් කරන ලදී! පසුව පැමිණ තත්ත්වය පරීක්ෂා කරන්න.")
                 time.sleep(2)
@@ -363,7 +355,6 @@ def render_generator_dashboard():
                         if st.button("💾 Save Manual Changes", key=f"save_{app['id']}"):
                             if edited_code != current_code:
                                 supabase.table("generated_apps").update({"app_code": edited_code}).eq("id", app['id']).execute()
-                                
                                 try:
                                     supabase.table("app_versions").insert({
                                         "app_id": app['id'],
@@ -372,7 +363,6 @@ def render_generator_dashboard():
                                     }).execute()
                                 except Exception as e:
                                     pass 
-                                    
                                 st.success("වෙනස්කම් සාර්ථකව Save කළා!")
                                 time.sleep(1)
                                 st.rerun()
@@ -416,6 +406,7 @@ def render_generator_dashboard():
                                 
                     st.markdown("---")
                     
+                    # MAGIC: ආපහු එකතු කරපු CHAT FUNCTION එක
                     st.markdown("💬 **AI එකට කියලා තව කෑලි එකතු කරගන්න**")
                     chat_hist = app.get('chat_history') or []
                     for msg in chat_hist:
