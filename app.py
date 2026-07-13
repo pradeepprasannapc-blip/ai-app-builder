@@ -9,7 +9,8 @@ from datetime import datetime, timedelta, timezone
 import groq
 from google import genai 
 import re
-import psycopg2 # MAGIC: Database එකට කනෙක්ට් වෙන අලුත් ටූල් එක
+import urllib.parse
+import pg8000.native # MAGIC: අලුත් Error-free Database Tool එක
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="AI App Factory - Master Core", layout="wide")
@@ -61,7 +62,6 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
     try:
         db.table("generated_apps").update({"status": "processing"}).eq("id", app_id).execute()
         
-        # User ගේ අන්තිම ඉල්ලීම හොයාගන්නවා
         chat_hist = app_data.get('chat_history') or []
         last_user_prompt = app_data['app_name']
         if chat_hist:
@@ -94,15 +94,23 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
             db_res = client.chat.completions.create(messages=[{"role": "user", "content": db_prompt}], model="llama-3.3-70b-versatile")
             db_schema_sql = db_res.choices[0].message.content.strip().replace("```sql", "").replace("```", "")
             
-        # SQL එකක් හැදුනා නම් ඒක ඇත්තටම Database එකේ රන් කරනවා! (Auto DB Creation)
+        # SQL එකක් හැදුනා නම් ඒක ඇත්තටම Database එකේ රන් කරනවා (Auto DB Creation using pg8000)
         if db_schema_sql and "NO_DB" not in db_schema_sql.upper():
             try:
                 db_url = st.secrets["DATABASE_URL"].strip()
-                conn = psycopg2.connect(db_url)
-                cur = conn.cursor()
-                cur.execute(db_schema_sql)
-                conn.commit()
-                cur.close()
+                parsed = urllib.parse.urlparse(db_url)
+                
+                # පාස්වර්ඩ් එකේ තියෙන %40 කෑල්ල හරියටම කියවගන්න unquote කරනවා
+                db_pass = urllib.parse.unquote(parsed.password) if parsed.password else None
+                
+                conn = pg8000.native.Connection(
+                    user=parsed.username,
+                    password=db_pass,
+                    host=parsed.hostname,
+                    port=parsed.port or 5432,
+                    database=parsed.path.lstrip('/')
+                )
+                conn.run(db_schema_sql)
                 conn.close()
                 print(f"✅ Auto DB Tables Created for App: {app_id}")
             except Exception as dbe:
@@ -123,7 +131,6 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
         4. NEVER use non-existent Streamlit commands like `st.footer()`.
         """
         
-        # Database එකක් හැදුවා නම්, Frontend AI එකට ඒක ගැන කියනවා
         if db_schema_sql and "NO_DB" not in db_schema_sql.upper():
             full_prompt += f"\n\nDATABASE EXISTS: The following PostgreSQL tables are already created in Supabase. You MUST write Streamlit code using the `supabase` python client (already configured with SUPABASE_URL and SUPABASE_KEY from st.secrets) to insert/select data from these tables:\n{db_schema_sql}\n"
             
@@ -150,7 +157,6 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
             chat_completion = client.chat.completions.create(messages=[{"role": "user", "content": full_prompt}], model="llama-3.3-70b-versatile")
             generated_code = chat_completion.choices[0].message.content
             
-        # Code Cleanup
         generated_code = generated_code.replace("```python", "").replace("```", "").strip()
         generated_code = generated_code.lstrip() 
         
