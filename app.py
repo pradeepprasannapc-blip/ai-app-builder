@@ -8,7 +8,8 @@ import random
 from datetime import datetime, timedelta, timezone
 import groq
 from google import genai 
-import re # MAGIC: අලුත් Regex Module එක
+import re
+import psycopg2 # MAGIC: Database එකට කනෙක්ට් වෙන අලුත් ටූල් එක
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="AI App Factory - Master Core", layout="wide")
@@ -52,7 +53,7 @@ def trigger_social_proof():
         st.toast(random.choice(messages), icon="🔔")
         st.session_state.show_toast = False 
 
-# --- AI GENERATOR ENGINE (STRICT & BULLETPROOF WORKER) ---
+# --- DUAL-AI GENERATOR ENGINE (FULL-STACK WORKER) ---
 def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_key):
     db = create_client(supa_url, supa_service_key)
     app_id = app_data['id']
@@ -60,50 +61,96 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
     try:
         db.table("generated_apps").update({"status": "processing"}).eq("id", app_id).execute()
         
+        # User ගේ අන්තිම ඉල්ලීම හොයාගන්නවා
+        chat_hist = app_data.get('chat_history') or []
+        last_user_prompt = app_data['app_name']
+        if chat_hist:
+            for msg in chat_hist:
+                if msg['role'] == 'user':
+                    last_user_prompt = msg['content']
+                    
+        # ==========================================
+        # 🧠 BRAIN 1: DATABASE ARCHITECT AI
+        # ==========================================
+        db_prompt = f"""
+        You are an expert PostgreSQL Database Architect.
+        The user wants an app based on this request: "{last_user_prompt}"
+        
+        Does this app need a database to store dynamic data (e.g., users, products, posts, tasks)?
+        If YES: Write ONLY the PostgreSQL 'CREATE TABLE IF NOT EXISTS' statements required. 
+        IMPORTANT: Ensure every table has an 'id' (UUID PRIMARY KEY DEFAULT gen_random_uuid()) and a 'created_at' column.
+        If NO (it's just a static app or calculator): Output EXACTLY the word: NO_DB
+        
+        Output ONLY raw SQL or NO_DB. No explanations, no markdown (no ```sql).
+        """
+        
+        db_schema_sql = ""
+        if app_data.get('selected_model') == 'gemini':
+            client = genai.Client(api_key=gemini_key)
+            db_res = client.models.generate_content(model='gemini-2.5-flash', contents=db_prompt)
+            db_schema_sql = db_res.text.strip().replace("```sql", "").replace("```", "")
+        else:
+            client = groq.Groq(api_key=groq_key)
+            db_res = client.chat.completions.create(messages=[{"role": "user", "content": db_prompt}], model="llama-3.3-70b-versatile")
+            db_schema_sql = db_res.choices[0].message.content.strip().replace("```sql", "").replace("```", "")
+            
+        # SQL එකක් හැදුනා නම් ඒක ඇත්තටම Database එකේ රන් කරනවා! (Auto DB Creation)
+        if db_schema_sql and "NO_DB" not in db_schema_sql.upper():
+            try:
+                db_url = st.secrets["DATABASE_URL"].strip()
+                conn = psycopg2.connect(db_url)
+                cur = conn.cursor()
+                cur.execute(db_schema_sql)
+                conn.commit()
+                cur.close()
+                conn.close()
+                print(f"✅ Auto DB Tables Created for App: {app_id}")
+            except Exception as dbe:
+                print(f"⚠️ DB Creation Error: {dbe}")
+                
+        # ==========================================
+        # 🧠 BRAIN 2: FRONTEND DEVELOPER AI
+        # ==========================================
         full_prompt = f"""
         You are an elite, highly precise Python Streamlit developer.
         App Name: {app_data['app_name']}
         Reference: {app_data['source_link']}
         
-        CRITICAL RULES (MUST FOLLOW STRICTLY):
-        1. OUTPUT PURE PYTHON CODE ONLY. Absolutely NO markdown formatting (DO NOT use ```python or ```).
-        2. NO introductory text, NO explanations, NO comments outside the code. Start immediately with 'import streamlit as st'.
-        3. STRICT PYTHON INDENTATION. Ensure spaces are mathematically perfect (exactly 4 spaces per indent level). Improper indentation will break the system.
-        4. NEVER use non-existent Streamlit commands (e.g., NO st.footer). Only use standard, valid Streamlit API components.
+        CRITICAL RULES:
+        1. OUTPUT PURE PYTHON CODE ONLY. NO markdown formatting (DO NOT use ```python or ```).
+        2. NO introductory text. Start immediately with 'import streamlit as st'.
+        3. STRICT PYTHON INDENTATION (4 spaces per level).
+        4. NEVER use non-existent Streamlit commands like `st.footer()`.
         """
         
-        last_user_prompt = "Initial Generation"
+        # Database එකක් හැදුවා නම්, Frontend AI එකට ඒක ගැන කියනවා
+        if db_schema_sql and "NO_DB" not in db_schema_sql.upper():
+            full_prompt += f"\n\nDATABASE EXISTS: The following PostgreSQL tables are already created in Supabase. You MUST write Streamlit code using the `supabase` python client (already configured with SUPABASE_URL and SUPABASE_KEY from st.secrets) to insert/select data from these tables:\n{db_schema_sql}\n"
+            
         if app_data.get('app_code'):
             full_prompt += f"\n\n--- CURRENT CODE ---\n{app_data['app_code']}\n"
             
-        chat_hist = app_data.get('chat_history') or []
         if chat_hist:
             full_prompt += "\n--- REQUESTED CHANGES ---\n"
             for msg in chat_hist:
                 if msg['role'] == 'user':
                     full_prompt += f"User: {msg['content']}\n"
-                    last_user_prompt = msg['content']
-            full_prompt += "\nPlease rewrite the entire code applying these requested changes flawlessly while obeying ALL CRITICAL RULES above."
+            full_prompt += "\nPlease rewrite the entire code flawlessly while obeying ALL CRITICAL RULES."
         else:
-            full_prompt += "\nWrite the complete initial code obeying ALL CRITICAL RULES above."
+            full_prompt += "\nWrite the complete initial code obeying ALL CRITICAL RULES."
             
         generated_code = ""
 
         if app_data.get('selected_model') == 'gemini':
             client = genai.Client(api_key=gemini_key)
-            response = client.models.generate_content(
-                model='gemini-2.5-flash',
-                contents=full_prompt,
-            )
+            response = client.models.generate_content(model='gemini-2.5-flash', contents=full_prompt)
             generated_code = response.text
         else:
             client = groq.Groq(api_key=groq_key)
-            chat_completion = client.chat.completions.create(
-                messages=[{"role": "user", "content": full_prompt}],
-                model="llama-3.3-70b-versatile", 
-            )
+            chat_completion = client.chat.completions.create(messages=[{"role": "user", "content": full_prompt}], model="llama-3.3-70b-versatile")
             generated_code = chat_completion.choices[0].message.content
             
+        # Code Cleanup
         generated_code = generated_code.replace("```python", "").replace("```", "").strip()
         generated_code = generated_code.lstrip() 
         
@@ -116,7 +163,7 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
                 "prompt_used": f"AI: {last_user_prompt}"
             }).execute()
         except Exception as ve:
-            print(f"Version Save Error: {ve}") 
+            pass 
             
     except Exception as e:
         error_msg = f"API Error: {str(e)}"
@@ -127,12 +174,10 @@ def background_recovery_worker():
     try:
         groq_key = st.secrets.get("GROQ_API_KEY", "").strip()
         gemini_key = st.secrets.get("GEMINI_KEY", "").strip() 
-        
         supa_url = st.secrets["SUPABASE_URL"].strip()
         supa_service_key = st.secrets.get("SUPABASE_SERVICE_KEY", st.secrets["SUPABASE_KEY"]).strip()
         
         db = create_client(supa_url, supa_service_key)
-        
         pending_apps = db.table("generated_apps").select("*").eq("status", "pending").execute()
         
         for app in pending_apps.data:
@@ -224,7 +269,7 @@ def render_generator_dashboard():
         st.error("⚠️ උපරිම සීමාවට පැමිණ ඇත. තවත් Apps සෑදීමට කරුණාකර Upgrade කරන්න.")
         return 
 
-    app_name = st.text_input("App එකේ නම", placeholder="Ex: My E-commerce App")
+    app_name = st.text_input("App එකේ නම", placeholder="Ex: E-commerce Product Manager")
     
     col1, col2 = st.columns(2)
     with col1:
@@ -306,7 +351,7 @@ def render_generator_dashboard():
                                     supabase.table("app_versions").insert({
                                         "app_id": app['id'],
                                         "version_code": edited_code,
-                                        "prompt_used": "Manual Edit (අතින් කළ වෙනස්කමක්)"
+                                        "prompt_used": "Manual Edit"
                                     }).execute()
                                 except Exception as e:
                                     pass 
@@ -319,11 +364,8 @@ def render_generator_dashboard():
                         st.info("💡 පහත බොත්තම ඔබා ඔබගේ ඇප් එකේ පෙරදසුනක් (Live Preview) මෙතනම බලාගන්න.")
                         if st.button("▶️ Run Preview", key=f"run_{app['id']}", type="primary"):
                             try:
-                                # MAGIC: Smart Regex පාවිච්චි කරලා Multi-line කමාන්ඩ්ස් සම්පූර්ණයෙන්ම මකා දැමීම
                                 safe_code = re.sub(r'st\.set_page_config\s*\([^)]*\)', '', current_code)
                                 safe_code = re.sub(r'st\.footer\s*\([^)]*\)', '', safe_code)
-                                
-                                # AI එක කරන මෝඩ අකුරු වැරදි (Capitalizations) හදමු
                                 safe_code = safe_code.replace("Import streamlit", "import streamlit")
                                 safe_code = safe_code.replace("Import youtubepy", "import youtubepy")
                                 safe_code = safe_code.replace("Import pandas", "import pandas")
@@ -353,11 +395,10 @@ def render_generator_dashboard():
                             else:
                                 st.info("පෙර සංස්කරණ කිසිවක් හමු නොවීය.")
                         except Exception as e:
-                            st.error("Versions ලබාගැනීමේ දෝෂයක්. (පරණ Apps වලට මෙය අදාළ නොවෙන්න පුළුවන්)")
+                            st.error("Versions ලබාගැනීමේ දෝෂයක්.")
                                 
                     st.markdown("---")
                     
-                    # --- CHAT TO BUILD INTERFACE ---
                     st.markdown("💬 **AI එකට කියලා තව කෑලි එකතු කරගන්න**")
                     chat_hist = app.get('chat_history') or []
                     for msg in chat_hist:
