@@ -24,7 +24,6 @@ SUPABASE_KEY = st.secrets["SUPABASE_KEY"].strip()
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # --- AUTO-UPDATE DATABASE SCHEMA ---
-# MAGIC: Supabase එකට අතින් Columns දාන එක නවත්තලා, ඔටෝම Update වෙන කෑල්ල!
 def init_database_schema():
     try:
         db_url = st.secrets.get("DATABASE_URL", "").strip()
@@ -38,18 +37,15 @@ def init_database_schema():
                 port=parsed.port or 5432,
                 database=parsed.path.lstrip('/')
             )
-            # අලුත් තීරු 3 නැත්නම් විතරක් ඔටෝම එකතු කරයි (IF NOT EXISTS)
             conn.run("ALTER TABLE generated_apps ADD COLUMN IF NOT EXISTS android_version TEXT;")
             conn.run("ALTER TABLE generated_apps ADD COLUMN IF NOT EXISTS app_icon_url TEXT;")
             conn.run("ALTER TABLE generated_apps ADD COLUMN IF NOT EXISTS icon_prompt TEXT;")
             
-            # API එකේ මතකය අලුත් කිරීම
             conn.run("NOTIFY pgrst, 'reload schema'")
             conn.close()
     except Exception as e:
         print("Auto DB Schema Update Error:", e)
 
-# ඇප් එක ලෝඩ් වෙද්දී හැමතිස්සෙම මේක චෙක් කරනවා
 init_database_schema()
 
 # --- SESSION STATE ---
@@ -142,7 +138,6 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
                 conn.run("NOTIFY pgrst, 'reload schema'")
                 conn.close()
                 time.sleep(2) 
-                print(f"✅ Auto DB Tables Created for App: {app_id}")
             except Exception as dbe:
                 print(f"⚠️ DB Creation Error: {dbe}")
                 
@@ -313,9 +308,21 @@ def render_generator_dashboard():
     
     col_a, col_b = st.columns(2)
     with col_a:
+        # MAGIC: ඔන්න ඔක්කොම Android Versions ටික දැම්මා!
         android_version = st.selectbox("Android Version එක තෝරන්න:", 
-                                       ["Android 8.0 (Oreo)", "Android 9.0 (Pie)", "Android 10.0", 
-                                        "Android 11.0", "Android 12.0", "Android 13.0", "Android 14.0", "Android 15.0"])
+                                       ["Android 4.0+ (Ice Cream Sandwich)", 
+                                        "Android 4.4+ (KitKat)", 
+                                        "Android 5.0+ (Lollipop)", 
+                                        "Android 6.0+ (Marshmallow)", 
+                                        "Android 7.0+ (Nougat)", 
+                                        "Android 8.0+ (Oreo)", 
+                                        "Android 9.0+ (Pie)", 
+                                        "Android 10.0+", 
+                                        "Android 11.0+", 
+                                        "Android 12.0+", 
+                                        "Android 13.0+", 
+                                        "Android 14.0+", 
+                                        "Android 15.0+"])
     with col_b:
         app_icon = st.file_uploader("App Logo එකක් තෝරන්න (Optional):", type=['png', 'jpg', 'jpeg'])
 
@@ -488,7 +495,7 @@ def render_generator_dashboard():
                                                     "app_id": app['id'],
                                                     "app_name": app_name_safe,
                                                     "app_code": current_code,
-                                                    "android_version": app.get('android_version', 'Android 10.0'),
+                                                    "android_version": app.get('android_version', 'Android 4.0+ (Ice Cream Sandwich)'),
                                                     "app_icon_url": app.get('app_icon_url', ''),
                                                     "icon_prompt": app.get('icon_prompt', '')
                                                 }
