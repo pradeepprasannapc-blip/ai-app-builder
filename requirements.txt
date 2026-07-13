@@ -6,3 +6,4 @@ requests
 pillow>=10.3.0
 pandas
 plotly
+psycopg2-binary==2.9.9
