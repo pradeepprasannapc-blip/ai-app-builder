@@ -10,7 +10,7 @@ import groq
 from google import genai 
 import re
 import urllib.parse
-import pg8000.native # MAGIC: අලුත් Error-free Database Tool එක
+import pg8000.native 
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="AI App Factory - Master Core", layout="wide")
@@ -63,7 +63,7 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
         db.table("generated_apps").update({"status": "processing"}).eq("id", app_id).execute()
         
         chat_hist = app_data.get('chat_history') or []
-        last_user_prompt = app_data['app_name']
+        last_user_prompt = app_data['source_link'] if app_data.get('source_link') else app_data['app_name']
         if chat_hist:
             for msg in chat_hist:
                 if msg['role'] == 'user':
@@ -94,13 +94,11 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
             db_res = client.chat.completions.create(messages=[{"role": "user", "content": db_prompt}], model="llama-3.3-70b-versatile")
             db_schema_sql = db_res.choices[0].message.content.strip().replace("```sql", "").replace("```", "")
             
-        # SQL එකක් හැදුනා නම් ඒක ඇත්තටම Database එකේ රන් කරනවා (Auto DB Creation using pg8000)
         if db_schema_sql and "NO_DB" not in db_schema_sql.upper():
             try:
                 db_url = st.secrets["DATABASE_URL"].strip()
                 parsed = urllib.parse.urlparse(db_url)
                 
-                # පාස්වර්ඩ් එකේ තියෙන %40 කෑල්ල හරියටම කියවගන්න unquote කරනවා
                 db_pass = urllib.parse.unquote(parsed.password) if parsed.password else None
                 
                 conn = pg8000.native.Connection(
@@ -117,22 +115,27 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
                 print(f"⚠️ DB Creation Error: {dbe}")
                 
         # ==========================================
-        # 🧠 BRAIN 2: FRONTEND DEVELOPER AI
+        # 🧠 BRAIN 2: FRONTEND DEVELOPER AI (STRICT DB RULES ADDED)
         # ==========================================
         full_prompt = f"""
         You are an elite, highly precise Python Streamlit developer.
         App Name: {app_data['app_name']}
-        Reference: {app_data['source_link']}
+        App Idea / Reference: {app_data['source_link']}
         
         CRITICAL RULES:
         1. OUTPUT PURE PYTHON CODE ONLY. NO markdown formatting (DO NOT use ```python or ```).
         2. NO introductory text. Start immediately with 'import streamlit as st'.
-        3. STRICT PYTHON INDENTATION (4 spaces per level).
-        4. NEVER use non-existent Streamlit commands like `st.footer()`.
+        3. ABSOLUTELY NO sqlite3. You are FORBIDDEN from using sqlite3. If data storage is required, you MUST use the `supabase` Python library.
+           Use this EXACT code to connect to the database:
+           from supabase import create_client, Client
+           import streamlit as st
+           supabase: Client = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
+        4. STRICT PYTHON INDENTATION (4 spaces per level).
+        5. NEVER use non-existent Streamlit commands like `st.footer()`.
         """
         
         if db_schema_sql and "NO_DB" not in db_schema_sql.upper():
-            full_prompt += f"\n\nDATABASE EXISTS: The following PostgreSQL tables are already created in Supabase. You MUST write Streamlit code using the `supabase` python client (already configured with SUPABASE_URL and SUPABASE_KEY from st.secrets) to insert/select data from these tables:\n{db_schema_sql}\n"
+            full_prompt += f"\n\nDATABASE EXISTS: The following PostgreSQL tables are already created in Supabase. You MUST insert/select data from these tables using the `supabase` python client initialized above:\n{db_schema_sql}\n"
             
         if app_data.get('app_code'):
             full_prompt += f"\n\n--- CURRENT CODE ---\n{app_data['app_code']}\n"
@@ -275,19 +278,21 @@ def render_generator_dashboard():
         st.error("⚠️ උපරිම සීමාවට පැමිණ ඇත. තවත් Apps සෑදීමට කරුණාකර Upgrade කරන්න.")
         return 
 
-    app_name = st.text_input("App එකේ නම", placeholder="Ex: E-commerce Product Manager")
+    app_name = st.text_input("App එකේ නම", placeholder="Ex: My Awesome App")
     
+    # MAGIC: අලුත් UI Wording එක
     col1, col2 = st.columns(2)
     with col1:
-        upload_option = st.radio("Source එක ලබා දෙන ආකාරය:", ["🔗 Link එකක් ලබා දීම", "📁 File එකක් Upload කිරීම"], horizontal=True)
+        upload_option = st.radio("App එක ගැන විස්තරය ලබා දෙන ආකාරය:", ["✍️ විස්තරයක් (Prompt) හෝ ලින්ක් එකක් දීම", "📁 File එකක් Upload කිරීම"], horizontal=True)
     with col2:
         ai_model_choice = st.radio("AI එන්ජිම තෝරන්න:", ["⚡ Groq (Fast)", "🧠 Gemini (Pro)"], horizontal=True)
         selected_model = "gemini" if "Gemini" in ai_model_choice else "groq"
     
     source_link = ""
     uploaded_file = None
-    if upload_option == "🔗 Link එකක් ලබා දීම":
-        source_link = st.text_input("ලින්ක් එක")
+    if upload_option == "✍️ විස්තරයක් (Prompt) හෝ ලින්ක් එකක් දීම":
+        # MAGIC: Text input එක වෙනුවට Text Area එකක් දැම්මා
+        source_link = st.text_area("ඔබේ අදහස (Prompt) හෝ වෙබ් ලින්ක් එක මෙහි ටයිප් කරන්න:", height=100, placeholder="උදා: මට සරල Todo List එකක් හදලා දෙන්න. ඒකේ Tasks ටික Database එකේ සේව් වෙන්න ඕනේ...")
     else:
         uploaded_file = st.file_uploader("File එක තෝරන්න", type=['zip', 'txt', 'py'])
         
@@ -323,7 +328,7 @@ def render_generator_dashboard():
                 time.sleep(2)
                 st.rerun()
         else:
-            st.error("කරුණාකර නම සහ ලින්ක් එක / File එක ලබා දෙන්න.")
+            st.error("කරුණාකර නම සහ විස්තරය / File එක ලබා දෙන්න.")
 
     st.markdown("---")
     st.markdown("### 📂 ඔබගේ Apps")
