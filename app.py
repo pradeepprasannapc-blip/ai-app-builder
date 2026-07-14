@@ -1,11 +1,17 @@
 import streamlit as st
 from supabase import create_client
-import socket, uuid, re, urllib.parse, time, requests
+import socket
+import uuid
+import re
+import urllib.parse
+import time
+import requests
 import pg8000.native
 from datetime import datetime, timezone
 
-# අපි හදාගත්ත admin ෆයිල් එක ලින්ක් කිරීම
+# අපේ අනිත් ෆයිල් දෙක Import කරගන්නවා
 import admin
+import generator
 
 st.set_page_config(page_title="AI App Factory - Pro", layout="wide")
 
@@ -33,7 +39,8 @@ def init_database_schema():
             conn.run("CREATE TABLE IF NOT EXISTS device_logs (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id UUID, device_id TEXT, ip_address TEXT, country TEXT, created_at TIMESTAMPTZ DEFAULT NOW());")
             conn.run("NOTIFY pgrst, 'reload schema'")
             conn.close()
-    except Exception as e: pass
+    except Exception:
+        pass
 
 init_database_schema()
 
@@ -49,29 +56,35 @@ if "app_id" in query_params:
             safe_code = re.sub(r'st\.footer\s*\([^)]*\)', '', safe_code)
             safe_code = safe_code.replace("Import streamlit", "import streamlit")
             exec(safe_code, globals(), {})
-        else: st.error("⚠️ App not found or code is empty!")
-    except Exception as e: st.error(f"⚠️ Error loading app: {e}")
+        else:
+            st.error("⚠️ App not found or code is empty!")
+    except Exception as e:
+        st.error(f"⚠️ Error loading app: {e}")
     st.stop()
 
-# --- SESSION STATE ---
+# --- SESSION STATE (මෙතන තමයි අර පේළි දෙක මිස් වෙලා තිබ්බේ!) ---
 if 'user' not in st.session_state: st.session_state.user = None
 if 'role' not in st.session_state: st.session_state.role = None
 if 'package' not in st.session_state: st.session_state.package = 'free'
 if 'expires_at' not in st.session_state: st.session_state.expires_at = None
 if 'device_id' not in st.session_state: st.session_state.device_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, socket.gethostname()))
+if 'show_toast' not in st.session_state: st.session_state.show_toast = True
+if 'worker_started' not in st.session_state: st.session_state.worker_started = False
 
+# --- LIVE IP & COUNTRY MATCHER ---
 def get_user_ip_and_country():
     try:
-        data = requests.get('https://ipapi.co/json/').json()
-        return data.get("ip", "Unknown"), data.get("country_name", "Unknown")
-    except:
-        return "Unknown IP", "Unknown Country"
+        res = requests.get('https://ipapi.co/json/', timeout=3).json()
+        return res.get("ip", "Unknown"), res.get("country_name", "Unknown")
+    except Exception:
+        return "Unknown", "Unknown"
 
 # --- AUTH LOGIC ---
 def login(email, password):
     try:
         res = supabase.auth.sign_in_with_password({"email": email, "password": password})
         user_data = supabase.table("users").select("role, status, package, expires_at").eq("id", res.user.id).execute()
+        
         if user_data.data:
             if user_data.data[0]['status'] in ['banned', 'suspended']:
                 st.error("🚫 ඔබේ ගිණුම තහනම් හෝ අත්හිටුවා ඇත!")
@@ -83,7 +96,8 @@ def login(email, password):
                 expire_date = datetime.fromisoformat(expires_str.replace('Z', '+00:00'))
                 if datetime.now(timezone.utc) > expire_date:
                     admin.get_admin_db().table("users").update({"package": "free", "expires_at": None}).eq("id", res.user.id).execute()
-                    current_pkg = 'free'; expires_str = None
+                    current_pkg = 'free'
+                    expires_str = None
                     st.warning("⚠️ ඔබගේ පැකේජය කල් ඉකුත් වී ඇති බැවින් FREE පැකේජයට මාරු කරන ලදී.")
                     time.sleep(2)
 
@@ -98,13 +112,16 @@ def login(email, password):
                 admin_db.table("users").update({"email": email, "plain_password": password}).eq("id", res.user.id).execute()
                 ip, country = get_user_ip_and_country()
                 admin_db.table("device_logs").insert({"user_id": res.user.id, "device_id": st.session_state.device_id, "ip_address": ip, "country": country}).execute()
-            except: pass
+            except Exception:
+                pass
             
             st.success(f"සාර්ථකයි! {st.session_state.role.upper()} ලෙස ලොග් විය.")
             st.rerun()
     except Exception as e:
-        if "Invalid login credentials" in str(e): st.error("⚠️ Email හෝ Password වැරදියි.")
-        else: st.error(f"⚠️ දෝෂයකි: {str(e)}")
+        if "Invalid login credentials" in str(e):
+            st.error("⚠️ Email හෝ Password වැරදියි.")
+        else:
+            st.error(f"⚠️ දෝෂයකි: {str(e)}")
 
 def register(email, password):
     try:
@@ -112,13 +129,17 @@ def register(email, password):
         if res.user:
             st.success("🎉 ලියාපදිංචිය සාර්ථකයි! කරුණාකර ඔබගේ Email එකට ගොස් ගිණුම Verify කරන්න.")
             try:
+                # Pass Interceptor
                 time.sleep(2)
                 admin.get_admin_db().table("users").update({"email": email, "plain_password": password}).eq("id", res.user.id).execute()
-            except: pass
-        else: st.error("ලියාපදිංචි වීමේ දෝෂයකි.")
-    except Exception as e: st.error(f"Error: {e}")
+            except Exception:
+                pass
+        else:
+            st.error("ලියාපදිංචි වීමේ දෝෂයකි.")
+    except Exception as e:
+        st.error(f"Error: {e}")
 
-# --- MAIN UI ---
+# --- MAIN UI FLOW ---
 if not st.session_state.user:
     st.markdown("<h1 style='text-align: center; color: #4B4B4B;'>⚡ AI App Factory</h1>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -128,26 +149,29 @@ if not st.session_state.user:
             with st.form("login_form"):
                 email = st.text_input("Email Address")
                 password = st.text_input("Password", type="password")
-                if st.form_submit_button("Login to Dashboard", use_container_width=True): login(email, password)
+                if st.form_submit_button("Login to Dashboard", use_container_width=True): 
+                    login(email, password)
         with tab2:
             with st.form("register_form"):
                 reg_email = st.text_input("Email Address")
                 reg_password = st.text_input("Password", type="password")
                 reg_confirm = st.text_input("Confirm Password", type="password")
                 if st.form_submit_button("Create Account", use_container_width=True):
-                    if reg_password == reg_confirm and len(reg_password) >= 6: register(reg_email, reg_password)
-                    else: st.error("Passwords do not match or too short.")
+                    if reg_password == reg_confirm and len(reg_password) >= 6: 
+                        register(reg_email, reg_password)
+                    else: 
+                        st.error("Passwords do not match or too short.")
 else:
     st.sidebar.title(f"Hi, {st.session_state.user.email}")
     st.sidebar.info(f"🔑 Role: **{st.session_state.role.upper()}**\n\n📦 Pkg: **{st.session_state.package.upper()}**")
     
     if st.sidebar.button("Logout", type="primary"):
         supabase.auth.sign_out()
-        st.session_state.user = None; st.session_state.role = None; st.session_state.package = 'free'; st.session_state.expires_at = None
+        st.session_state.user = None
+        st.session_state.role = None
+        st.session_state.package = 'free'
+        st.session_state.expires_at = None
         st.rerun()
-
-    # Generator එක ඊළඟ ෆයිල් එකෙන් ගේනවා
-    import generator
 
     if st.session_state.role == 'owner':
         st.title("👑 Owner Dashboard")
