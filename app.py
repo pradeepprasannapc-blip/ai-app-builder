@@ -48,6 +48,33 @@ def init_database_schema():
 
 init_database_schema()
 
+# ==========================================
+# 🪄 MAGIC ROUTING SYSTEM (WEBVIEW SERVER)
+# ==========================================
+query_params = st.query_params
+if "app_id" in query_params:
+    target_app_id = query_params["app_id"]
+    try:
+        res = supabase.table("generated_apps").select("app_code").eq("id", target_app_id).execute()
+        if res.data and res.data[0].get("app_code"):
+            app_code = res.data[0]["app_code"]
+            
+            # ප්ලේ වෙද්දී Error එන කෑලි අයින් කිරීම
+            safe_code = re.sub(r'st\.set_page_config\s*\([^)]*\)', '', app_code)
+            safe_code = re.sub(r'st\.footer\s*\([^)]*\)', '', safe_code)
+            safe_code = safe_code.replace("Import streamlit", "import streamlit")
+            
+            # ඇප් එක Full Screen ප්ලේ කිරීම
+            exec(safe_code, globals(), {})
+        else:
+            st.error("⚠️ App not found or code is empty!")
+    except Exception as e:
+        st.error(f"⚠️ Error loading app: {e}")
+        
+    # මෙතනින් පස්සේ Dashboard එක ලෝඩ් වීම නවත්වනවා (ඇප් එක විතරක් පේන්න)
+    st.stop()
+
+
 # --- SESSION STATE ---
 if 'user' not in st.session_state:
     st.session_state.user = None
@@ -160,8 +187,8 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
            supabase: Client = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
         5. UNIQUE KEYS (CRITICAL): EVERY `st.text_input`, `st.button`, `st.text_area` MUST have a globally unique `key=` argument. 
            EXCEPTION FOR st.form: The first positional argument of st.form IS the key. NEVER use `key=` inside st.form. 
-        6. STREAMLIT ANTI-PATTERNS (CRITICAL): NEVER nest `st.form` inside an `if st.button():` block. Forms will disappear on submit. 
-        7. TABS RULE (CRITICAL): NEVER use a `key=` argument in `st.tabs`. NEVER check `st.session_state` for tab values. ALWAYS unpack tabs exactly like this: `tab1, tab2 = st.tabs(["A", "B"])` and use `with tab1:`.
+        6. STREAMLIT ANTI-PATTERNS (CRITICAL): NEVER nest `st.form` inside an `if st.button():` block. Forms will disappear on submit. Use `st.tabs` or `st.session_state` to switch views.
+        7. TABS RULE (CRITICAL): NEVER use a `key=` argument in `st.tabs`. NEVER check `st.session_state` for tabs. ALWAYS unpack tabs exactly like this: `tab1, tab2 = st.tabs(["A", "B"])` and use `with tab1:`.
         """
         
         if db_schema_sql and "NO_DB" not in db_schema_sql.upper():
@@ -491,6 +518,9 @@ def render_generator_dashboard():
                                                 "Authorization": f"token {github_token}"
                                             }
                                             
+                                            # MAGIC: මෙන්න අලුත් App URL එක යවන තැන
+                                            custom_app_url = f"[https://ai-app-builder-x6qbi2k3iobvvzqbktkfma.streamlit.app/?app_id=](https://ai-app-builder-x6qbi2k3iobvvzqbktkfma.streamlit.app/?app_id=){app['id']}"
+                                            
                                             payload = {
                                                 "event_type": "build_apk",
                                                 "client_payload": {
@@ -499,7 +529,7 @@ def render_generator_dashboard():
                                                     "app_code": current_code,
                                                     "android_version": app.get('android_version', 'Android 4.0+ (Ice Cream Sandwich)'),
                                                     "app_icon_url": app.get('app_icon_url', ''),
-                                                    "icon_prompt": app.get('icon_prompt', '')
+                                                    "app_url": custom_app_url
                                                 }
                                             }
                                             res = requests.post(f"[https://api.github.com/repos/](https://api.github.com/repos/){github_repo}/dispatches", json=payload, headers=headers)
