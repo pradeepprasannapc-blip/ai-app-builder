@@ -160,7 +160,8 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
            supabase: Client = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
         5. UNIQUE KEYS (CRITICAL): EVERY `st.text_input`, `st.button`, `st.text_area` MUST have a globally unique `key=` argument. 
            EXCEPTION FOR st.form: The first positional argument of st.form IS the key. NEVER use `key=` inside st.form. 
-        6. STREAMLIT ANTI-PATTERNS (CRITICAL): NEVER nest `st.form` inside an `if st.button():` block. Forms will disappear on submit. Use `st.tabs` or `st.session_state` to switch views.
+        6. STREAMLIT ANTI-PATTERNS (CRITICAL): NEVER nest `st.form` inside an `if st.button():` block. Forms will disappear on submit. 
+        7. TABS RULE (CRITICAL): NEVER use a `key=` argument in `st.tabs`. NEVER check `st.session_state` for tab values. ALWAYS unpack tabs exactly like this: `tab1, tab2 = st.tabs(["A", "B"])` and use `with tab1:`.
         """
         
         if db_schema_sql and "NO_DB" not in db_schema_sql.upper():
@@ -362,7 +363,6 @@ def render_generator_dashboard():
                     supabase.storage.from_("app_sources").upload(icon_path, app_icon.getvalue())
                     icon_url = supabase.storage.from_("app_sources").get_public_url(icon_path)
 
-            # MAGIC: මෙතන තමයි Error එක නැති වෙන්න හරියටම අලුත් තීරු ටිකත් එක්ක Insert කරන්නේ
             insert_data = {
                 "owner_id": st.session_state.user.id, 
                 "app_name": app_name, 
