@@ -308,7 +308,6 @@ def render_generator_dashboard():
     
     col_a, col_b = st.columns(2)
     with col_a:
-        # MAGIC: ඔන්න ඔක්කොම Android Versions ටික දැම්මා!
         android_version = st.selectbox("Android Version එක තෝරන්න:", 
                                        ["Android 4.0+ (Ice Cream Sandwich)", 
                                         "Android 4.4+ (KitKat)", 
@@ -363,7 +362,8 @@ def render_generator_dashboard():
                     supabase.storage.from_("app_sources").upload(icon_path, app_icon.getvalue())
                     icon_url = supabase.storage.from_("app_sources").get_public_url(icon_path)
 
-            res = supabase.table("generated_apps").insert({
+            # MAGIC: මෙතන තමයි Error එක නැති වෙන්න හරියටම අලුත් තීරු ටිකත් එක්ක Insert කරන්නේ
+            insert_data = {
                 "owner_id": st.session_state.user.id, 
                 "app_name": app_name, 
                 "source_link": final_source_link, 
@@ -371,10 +371,12 @@ def render_generator_dashboard():
                 "status": "pending",
                 "selected_model": selected_model,
                 "chat_history": [],
-                "android_version": android_version,
+                "android_version": android_version if android_version else "Android 10.0+",
                 "app_icon_url": icon_url,
-                "icon_prompt": icon_prompt
-            }).execute()
+                "icon_prompt": icon_prompt if icon_prompt else ""
+            }
+
+            res = supabase.table("generated_apps").insert(insert_data).execute()
             
             if res.data:
                 groq_key = st.secrets.get("GROQ_API_KEY", "").strip()
