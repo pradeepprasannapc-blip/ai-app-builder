@@ -153,7 +153,7 @@ def render_payment_approvals():
                     st.rerun()
 
 def render_admin_app_management():
-    import generator 
+    import generator
     st.markdown("### 📱 Global App Management")
     admin_db = get_admin_db()
     all_apps_res = admin_db.table("generated_apps").select("*").order("created_at", desc=True).execute()
