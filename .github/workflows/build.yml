@@ -5,34 +5,138 @@ on:
     types: [build_apk]
 
 jobs:
-  build:
+  build-apk:
     name: Cloud Android Studio Builder
     runs-on: ubuntu-latest
-
+    
     steps:
-      # මෙතන @v4 දැම්මම අර Node.js 20 Deprecated කියන Error එක සම්පූර්ණයෙන්ම නැති වෙනවා.
-      - name: Checkout Repository
+      - name: 📥 Checkout Code
         uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      - name: ⚙️ Setup Java JDK
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Setup Node.js Environment
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
+      - name: 🛠️ Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
 
-      - name: Process App Data
+      - name: 🤖 Generate Android Studio Project on the Fly
+        env:
+          APP_NAME: ${{ github.event.client_payload.app_name }}
+          APP_ID: ${{ github.event.client_payload.app_id }}
+          ANDROID_VERSION: ${{ github.event.client_payload.android_version }}
+          APP_URL: ${{ github.event.client_payload.app_url }}
         run: |
-          echo "Building APK for: ${{ github.event.client_payload.app_name }}"
-          echo "App ID: ${{ github.event.client_payload.app_id }}"
-          echo "Android Target: ${{ github.event.client_payload.android_version }}"
+          python -c "
+          import os
           
-      # ඔයාගේ ඇප් එක APK එකක් විදිහට බිල්ඩ් වෙන ප්‍රධාන කමාන්ඩ් එක මෙතනින් ක්‍රියාත්මක වේ.
-      - name: Run Build Script
+          print('🚀 AI Factory: Generating Android Studio Structure...')
+          
+          # Create Android Folders
+          os.makedirs('app/src/main/java/com/aifactory/myapp', exist_ok=True)
+          os.makedirs('app/src/main/res/values', exist_ok=True)
+          os.makedirs('app/src/main/res/mipmap-xxxhdpi', exist_ok=True)
+
+          # 1. settings.gradle
+          with open('settings.gradle', 'w') as f:
+              f.write(\"rootProject.name = 'AI_App'\\ninclude ':app'\\n\")
+
+          # 2. Top-level build.gradle
+          with open('build.gradle', 'w') as f:
+              f.write('''
+          buildscript {
+              repositories { google(); mavenCentral() }
+              dependencies { classpath 'com.android.tools.build:gradle:8.1.1' }
+          }
+          allprojects {
+              repositories { google(); mavenCentral() }
+          }
+          ''')
+
+          # 3. App-level build.gradle
+          with open('app/build.gradle', 'w') as f:
+              f.write('''
+          plugins { id 'com.android.application' }
+          android {
+              namespace 'com.aifactory.myapp'
+              compileSdk 34
+              defaultConfig {
+                  applicationId 'com.aifactory.myapp'
+                  minSdk 21  // Updated to Android 5.0+ to prevent AGP 8+ build crashes
+                  targetSdk 34
+                  versionCode 1
+                  versionName '1.0'
+              }
+          }
+          ''')
+
+          # 4. AndroidManifest.xml
+          with open('app/src/main/AndroidManifest.xml', 'w') as f:
+              f.write('''<?xml version=\"1.0\" encoding=\"utf-8\"?>
+          <manifest xmlns:android=\"http://schemas.android.com/apk/res/android\">
+              <uses-permission android:name=\"android.permission.INTERNET\" />
+              <application
+                  android:allowBackup=\"true\"
+                  android:icon=\"@mipmap/ic_launcher\"
+                  android:label=\"@string/app_name\"
+                  android:theme=\"@android:style/Theme.NoTitleBar\">
+                  <activity android:name=\".MainActivity\" android:exported=\"true\">
+                      <intent-filter>
+                          <action android:name=\"android.intent.action.MAIN\" />
+                          <category android:name=\"android.intent.category.LAUNCHER\" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>''')
+
+          # 5. strings.xml (App Name)
+          app_name = os.environ.get('APP_NAME', 'My AI App')
+          with open('app/src/main/res/values/strings.xml', 'w') as f:
+              f.write(f'<?xml version=\"1.0\" encoding=\"utf-8\"?><resources><string name=\"app_name\">{app_name}</string></resources>')
+
+          # 6. MainActivity.java (Hybrid Web-View with Dynamic URL Injection)
+          app_url = os.environ.get('APP_URL', 'https://google.com')
+          with open('app/src/main/java/com/aifactory/myapp/MainActivity.java', 'w') as f:
+              f.write(f'''package com.aifactory.myapp;
+          import android.app.Activity;
+          import android.os.Bundle;
+          import android.webkit.WebView;
+          import android.webkit.WebViewClient;
+          public class MainActivity extends Activity {{
+              @Override
+              protected void onCreate(Bundle savedInstanceState) {{
+                  super.onCreate(savedInstanceState);
+                  WebView webView = new WebView(this);
+                  webView.getSettings().setJavaScriptEnabled(true);
+                  webView.getSettings().setDomStorageEnabled(true);
+                  webView.setWebViewClient(new WebViewClient());
+                  
+                  // Dynamically loads the specific App URL
+                  webView.loadUrl(\"{app_url}\"); 
+                  setContentView(webView);
+              }}
+          }}''')
+          
+          print('✅ Android Studio Project Generated Successfully!')
+          "
+
+      - name: 🎨 Download & Apply Custom App Icon
         run: |
-          chmod +x ./build.sh || true
-          ./build.sh "${{ github.event.client_payload.app_name }}" "${{ github.event.client_payload.app_code }}"
+          if [ "${{ github.event.client_payload.app_icon_url }}" != "" ]; then
+            echo "🖼️ Downloading user provided icon..."
+            curl -o app/src/main/res/mipmap-xxxhdpi/ic_launcher.png "${{ github.event.client_payload.app_icon_url }}"
+          else
+            echo "⚠️ No icon provided. (Default Android Icon will be used)"
+          fi
+
+      - name: 🏗️ Build APK (Compiling)
+        run: gradle assembleDebug
+
+      - name: 📦 Upload APK to User
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ github.event.client_payload.app_name }}-Android-App
+          path: app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 5
