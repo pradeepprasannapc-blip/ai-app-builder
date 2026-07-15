@@ -102,13 +102,11 @@ def render_god_mode():
                     st.write("Danger Zone:")
                     if st.button("🗑️ Delete User", type="primary", key=f"del_user_{u['id']}"):
                         try:
-                            # 1st attempt: True Delete via API
                             admin_db.auth.admin.delete_user(u['id'])
                             st.success("User completely deleted!")
                         except Exception:
-                            # Fallback: Hard Ban
                             admin_db.table("users").update({"status": "banned"}).eq("id", u['id']).execute()
-                            st.warning("Hard delete API failed. User has been completely BANNED instead.")
+                            st.warning("User API delete blocked. User BANNED instead.")
                         time.sleep(2)
                         st.rerun()
                 
@@ -155,7 +153,7 @@ def render_payment_approvals():
                     st.rerun()
 
 def render_admin_app_management():
-    import generator # Local import to avoid circular dependency
+    import generator 
     st.markdown("### 📱 Global App Management")
     admin_db = get_admin_db()
     all_apps_res = admin_db.table("generated_apps").select("*").order("created_at", desc=True).execute()
