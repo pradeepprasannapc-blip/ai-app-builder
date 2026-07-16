@@ -32,7 +32,7 @@ def trigger_social_proof():
         st.session_state.show_toast = False 
 
 def clean_python_code(code_str):
-    code_str = code_str.replace("```python", "").replace("```", "").strip()
+    code_str = str(code_str).replace("```python", "").replace("```", "").strip()
     lines = code_str.split('\n')
     while lines and not lines[0].strip():
         lines.pop(0)
@@ -169,12 +169,25 @@ if not st.session_state.get('worker_started', False):
     st.session_state.worker_started = True
 
 def render_app_card(app, is_admin=False):
-    status_str = str(app.get('status') or 'unknown').upper()
-    app_name_safe = app.get('app_name', 'Untitled')
+    if not isinstance(app, dict):
+        return
+
+    status_val = app.get('status')
+    status_str = str(status_val).upper() if status_val else "UNKNOWN"
+    
+    app_name_val = app.get('app_name')
+    app_name_safe = str(app_name_val) if app_name_val else "Untitled"
+    
+    # Error Fix: Force convert ID to string before slicing to prevent TypeError
+    app_id_val = str(app.get('id', ''))
+    short_id = app_id_val[:8] if len(app_id_val) >= 8 else app_id_val
     
     header = f"📦 {app_name_safe} | Status: {status_str}"
+    
     if is_admin:
-        header += f" | Vis: {'Public 👁️' if app.get('is_visible', True) else 'Private 🔒'} | ID: {app['id'][:8]}"
+        vis = app.get('is_visible')
+        vis_text = "Public 👁️" if (vis is True or vis is None) else "Private 🔒"
+        header += f" | Vis: {vis_text} | ID: {short_id}"
 
     with st.expander(header):
         if is_admin:
@@ -270,11 +283,11 @@ def render_app_card(app, is_admin=False):
                                         "Accept": "application/vnd.github.v3+json", 
                                         "Authorization": f"token {clean_token}"
                                     }
-                                    custom_app_url = f"https://ai-app-builder-x6qbi2k3iobvvzqbktkfma.streamlit.app/?app_id={app['id']}"
+                                    custom_app_url = f"https://ai-app-builder-x6qbi2k3iobvvzqbktkfma.streamlit.app/?app_id={str(app['id'])}"
                                     payload = {
                                         "event_type": "build_apk",
                                         "client_payload": {
-                                            "app_id": app['id'], 
+                                            "app_id": str(app['id']), 
                                             "app_name": app_name_safe, 
                                             "app_code": current_code,
                                             "android_version": app.get('android_version', 'Android 4.0+'), 
