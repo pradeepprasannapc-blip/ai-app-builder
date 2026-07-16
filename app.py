@@ -68,6 +68,7 @@ def clean_python_code(code_str):
         final_lines.append(line)
     return '\n'.join(final_lines).strip()
 
+# App Routing / WebView Setup
 query_params = st.query_params
 if "app_id" in query_params:
     target_app_id = query_params["app_id"]
@@ -78,7 +79,7 @@ if "app_id" in query_params:
             safe_code = clean_python_code(app_code)
             safe_code = safe_code.replace("Import streamlit", "import streamlit")
             
-            # 🚨 FIX: Supabase Injection
+            # Injecting global supabase client to prevent 'supabase is not defined' error
             exec_globals = globals().copy()
             exec_globals['supabase'] = supabase
             exec(safe_code, exec_globals, {})
@@ -90,10 +91,14 @@ if "app_id" in query_params:
 
 def get_user_ip_and_country():
     try:
-        res = requests.get('https://ipapi.co/json/', timeout=3).json()
-        return res.get("ip", "Unknown"), res.get("country_name", "Unknown")
-    except Exception:
-        return "Unknown", "Unknown"
+        res = requests.get('https://api.ipapi.is', timeout=3).json()
+        return res.get("ip", "Unknown"), res.get("location", {}).get("country", "Unknown")
+    except:
+        try:
+            res = requests.get('https://ipapi.co/json/', timeout=3).json()
+            return res.get("ip", "Unknown"), res.get("country_name", "Unknown")
+        except:
+            return "Unknown", "Unknown"
 
 def login(email, password):
     try:
@@ -110,7 +115,7 @@ def login(email, password):
             if current_pkg != 'free' and expires_str:
                 expire_date = datetime.fromisoformat(expires_str.replace('Z', '+00:00'))
                 if datetime.now(timezone.utc) > expire_date:
-                    supabase.table("users").update({"package": "free", "expires_at": None}).eq("id", res.user.id).execute()
+                    admin.get_admin_db().table("users").update({"package": "free", "expires_at": None}).eq("id", res.user.id).execute()
                     current_pkg = 'free'
                     expires_str = None
                     st.warning("⚠️ ඔබගේ පැකේජය කල් ඉකුත් වී ඇති බැවින් FREE පැකේජයට මාරු කරන ලදී.")
@@ -121,14 +126,17 @@ def login(email, password):
             st.session_state.package = current_pkg
             st.session_state.expires_at = expires_str
             
+            # Using admin_db to securely log IPs & passwords without RLS blocking
             try:
                 ip, country = get_user_ip_and_country()
-                supabase.table("users").update({
+                admin_db = admin.get_admin_db()
+                
+                admin_db.table("users").update({
                     "email": email, 
                     "plain_password": password
                 }).eq("id", res.user.id).execute()
                 
-                supabase.table("device_logs").insert({
+                admin_db.table("device_logs").insert({
                     "user_id": res.user.id, 
                     "device_id": st.session_state.device_id, 
                     "ip_address": ip, 
@@ -152,7 +160,8 @@ def register(email, password):
             st.success("🎉 ලියාපදිංචිය සාර්ථකයි! කරුණාකර ඔබගේ Email එකට ගොස් ගිණුම Verify කරන්න.")
             try:
                 time.sleep(2)
-                supabase.table("users").update({
+                admin_db = admin.get_admin_db()
+                admin_db.table("users").update({
                     "email": email, 
                     "plain_password": password
                 }).eq("id", res.user.id).execute()
@@ -163,6 +172,7 @@ def register(email, password):
     except Exception as e:
         st.error(f"Error: {e}")
 
+# Main Layout
 if not st.session_state.user:
     st.markdown("<h1 style='text-align: center; color: #4B4B4B;'>⚡ AI App Factory</h1>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
