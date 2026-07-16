@@ -241,7 +241,10 @@ def render_app_card(app, is_admin=False):
                             safe_code = safe_code.replace("Import streamlit", "import streamlit")
                             st.markdown("### 📱 Live App Demo")
                             with st.container(border=True): 
-                                exec(safe_code, globals(), {})
+                                # 🚨 FIX: Supabase Injection for Previews
+                                exec_globals = globals().copy()
+                                exec_globals['supabase'] = get_db(is_admin)
+                                exec(safe_code, exec_globals, {})
                         except Exception as e: 
                             st.error(f"Preview Error: {e}")
                             
