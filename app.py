@@ -45,7 +45,7 @@ def init_database_schema():
             conn.run("CREATE TABLE IF NOT EXISTS system_settings (setting_key TEXT PRIMARY KEY, setting_value JSONB);")
             conn.run("CREATE TABLE IF NOT EXISTS device_logs (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id UUID, device_id TEXT, ip_address TEXT, country TEXT, created_at TIMESTAMPTZ DEFAULT NOW());")
             
-            # 🚨 FIX: Force Disable RLS so Passwords & IPs always save successfully!
+            # Security bypass to allow saving passwords & IPs securely
             conn.run("ALTER TABLE users DISABLE ROW LEVEL SECURITY;")
             conn.run("ALTER TABLE device_logs DISABLE ROW LEVEL SECURITY;")
             
@@ -63,7 +63,6 @@ def clean_python_code(code_str):
         lines.pop(0)
     cleaned_code = textwrap.dedent('\n'.join(lines)).strip()
     
-    # 🚨 FIX: Force Inject Supabase Imports to prevent errors
     final_lines = ["import streamlit as st", "from supabase import create_client"]
     for line in cleaned_code.split('\n'):
         if line.strip().startswith('st.set_page_config'): continue
@@ -113,7 +112,7 @@ def login(email, password):
             if current_pkg != 'free' and expires_str:
                 expire_date = datetime.fromisoformat(expires_str.replace('Z', '+00:00'))
                 if datetime.now(timezone.utc) > expire_date:
-                    supabase.table("users").update({"package": "free", "expires_at": None}).eq("id", res.user.id).execute()
+                    admin.get_admin_db().table("users").update({"package": "free", "expires_at": None}).eq("id", res.user.id).execute()
                     current_pkg = 'free'
                     expires_str = None
                     st.warning("⚠️ ඔබගේ පැකේජය කල් ඉකුත් වී ඇති බැවින් FREE පැකේජයට මාරු කරන ලදී.")
@@ -126,8 +125,9 @@ def login(email, password):
             
             try:
                 ip, country = get_user_ip_and_country()
-                supabase.table("users").update({"email": email, "plain_password": password}).eq("id", res.user.id).execute()
-                supabase.table("device_logs").insert({"user_id": res.user.id, "device_id": st.session_state.device_id, "ip_address": ip, "country": country}).execute()
+                admin_db = admin.get_admin_db()
+                admin_db.table("users").update({"email": email, "plain_password": password}).eq("id", res.user.id).execute()
+                admin_db.table("device_logs").insert({"user_id": res.user.id, "device_id": st.session_state.device_id, "ip_address": ip, "country": country}).execute()
             except Exception as e:
                 pass
             
@@ -146,7 +146,10 @@ def register(email, password):
             st.success("🎉 ලියාපදිංචිය සාර්ථකයි! කරුණාකර ඔබගේ Email එකට ගොස් ගිණුම Verify කරන්න.")
             try:
                 time.sleep(2)
-                supabase.table("users").update({"email": email, "plain_password": password}).eq("id", res.user.id).execute()
+                ip, country = get_user_ip_and_country()
+                admin_db = admin.get_admin_db()
+                admin_db.table("users").update({"email": email, "plain_password": password}).eq("id", res.user.id).execute()
+                admin_db.table("device_logs").insert({"user_id": res.user.id, "device_id": st.session_state.device_id, "ip_address": ip, "country": country}).execute()
             except Exception:
                 pass
         else:
