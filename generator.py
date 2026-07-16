@@ -9,20 +9,20 @@ import pg8000.native
 import io
 import zipfile
 import requests
+import textwrap
 from datetime import datetime, timezone
 import groq
 from google import genai
 
-import admin # Admin ෆයිල් එකේ තියෙන Settings මේකට ගන්නවා
+import admin
 
-# --- SUPABASE SETUP ---
-SUPABASE_URL = st.secrets["SUPABASE_URL"].strip()
-SUPABASE_KEY = st.secrets["SUPABASE_KEY"].strip()
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+def get_db(is_admin=False):
+    if is_admin:
+        return admin.get_admin_db()
+    return create_client(st.secrets["SUPABASE_URL"].strip(), st.secrets["SUPABASE_KEY"].strip())
 
-# --- SOCIAL PROOF NOTIFICATIONS ---
 def trigger_social_proof():
-    if st.session_state.show_toast:
+    if st.session_state.get('show_toast', False):
         messages = [
             "🔥 අද දින 50+ දෙනෙක් සාර්ථකව Apps සාදා ඇත!",
             "🎉 කොළඹින් අලුත් පරිශීලකයෙක් Gold පැකේජය ලබා ගත්තා!",
@@ -31,13 +31,26 @@ def trigger_social_proof():
         st.toast(random.choice(messages), icon="🔔")
         st.session_state.show_toast = False 
 
-# --- DUAL-AI GENERATOR ENGINE ---
+def clean_python_code(code_str):
+    # Indentation Error Fix
+    code_str = code_str.replace("```python", "").replace("```", "").strip()
+    lines = code_str.split('\n')
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    cleaned_code = textwrap.dedent('\n'.join(lines)).strip()
+    
+    final_lines = []
+    for line in cleaned_code.split('\n'):
+        if line.strip().startswith('st.set_page_config'): continue
+        if line.strip().startswith('st.footer'): continue
+        final_lines.append(line)
+    return '\n'.join(final_lines).strip()
+
 def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_key):
     db = create_client(supa_url, supa_service_key)
     app_id = app_data['id']
     
     try:
-        # තත්ත්වය Processing ලෙස වෙනස් කිරීම
         db.table("generated_apps").update({"status": "processing"}).eq("id", app_id).execute()
         
         chat_hist = app_data.get('chat_history') or []
@@ -47,7 +60,6 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
                 if msg['role'] == 'user': 
                     last_user_prompt = msg['content']
                     
-        # 1. DATABASE SCHEMA GENERATION
         db_prompt = f"""
         You are an expert PostgreSQL Database Architect.
         The user wants an app based on this request: "{last_user_prompt}"
@@ -55,7 +67,7 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
         Does this app need a database to store dynamic data (e.g., users, products, posts, tasks)?
         If YES: Write ONLY the PostgreSQL 'CREATE TABLE IF NOT EXISTS' statements required. 
         IMPORTANT: Ensure every table has an 'id' (UUID PRIMARY KEY DEFAULT gen_random_uuid()) and a 'created_at' column.
-        If NO (it's just a static app or calculator): Output EXACTLY the word: NO_DB
+        If NO: Output EXACTLY the word: NO_DB
         
         Output ONLY raw SQL or NO_DB. No explanations, no markdown.
         """
@@ -89,7 +101,6 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
             except Exception as dbe: 
                 print(f"⚠️ DB Creation Error: {dbe}")
                 
-        # 2. PYTHON UI CODE GENERATION
         full_prompt = f"""
         You are an elite Python Streamlit developer.
         App Name: {app_data['app_name']}
@@ -97,8 +108,8 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
         
         CRITICAL RULES:
         1. PURE PYTHON CODE ONLY. NO markdown.
-        2. NO introductory text. Start immediately with import streamlit as st.
-        3. 4 spaces indentation.
+        2. Start immediately with import streamlit as st. DO NOT leave empty spaces at the beginning of the file.
+        3. 4 spaces indentation everywhere. DO NOT use inconsistent indentation.
         4. NO sqlite3. Use supabase ONLY.
         5. UNIQUE KEYS: EVERY input/button MUST have a unique key=. (EXCEPTION: st.form name is its key).
         6. NO nested forms in buttons.
@@ -129,12 +140,9 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
             chat_completion = client.chat.completions.create(messages=[{"role": "user", "content": full_prompt}], model="llama-3.3-70b-versatile")
             generated_code = chat_completion.choices[0].message.content
             
-        # Clean Code
-        generated_code = generated_code.replace("```python", "").replace("```", "").strip().lstrip()
+        generated_code = generated_code.replace("```python", "").replace("```", "").strip()
         
-        # Save Code
         db.table("generated_apps").update({"status": "completed", "app_code": generated_code}).eq("id", app_id).execute()
-        
         try: 
             db.table("app_versions").insert({"app_id": app_id, "version_code": generated_code, "prompt_used": f"AI: {last_user_prompt}"}).execute()
         except Exception: 
@@ -144,28 +152,23 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
         error_msg = f"API Error: {str(e)}"
         db.table("generated_apps").update({"status": "failed", "app_code": error_msg}).eq("id", app_id).execute()
 
-# --- BACKGROUND WORKER ---
 def background_recovery_worker():
     try:
         admin_db = admin.get_admin_db()
         pending_apps = admin_db.table("generated_apps").select("*").eq("status", "pending").execute()
-        
         for app in pending_apps.data:
             groq_key = st.secrets.get("GROQ_API_KEY", "").strip()
             gemini_key = st.secrets.get("GEMINI_KEY", "").strip()
             supa_url = st.secrets["SUPABASE_URL"].strip()
             supa_key = st.secrets.get("SUPABASE_SERVICE_KEY", st.secrets["SUPABASE_KEY"]).strip()
-            
             process_single_app(app, groq_key, gemini_key, supa_url, supa_key)
-    except Exception as e: 
-        print("Worker Error:", e)
+    except Exception: 
+        pass
 
-# Start worker once
 if not st.session_state.get('worker_started', False):
     threading.Thread(target=background_recovery_worker, daemon=True).start()
     st.session_state.worker_started = True
 
-# --- APP RENDERER (SHARED FOR ADMIN AND USER) ---
 def render_app_card(app, is_admin=False):
     status_str = str(app.get('status') or 'unknown').upper()
     app_name_safe = app.get('app_name', 'Untitled')
@@ -175,7 +178,6 @@ def render_app_card(app, is_admin=False):
         header += f" | Vis: {'Public 👁️' if app.get('is_visible', True) else 'Private 🔒'} | ID: {app['id'][:8]}"
 
     with st.expander(header):
-        # Admin Visibility Controls
         if is_admin:
             colA, colB = st.columns(2)
             with colA:
@@ -193,7 +195,6 @@ def render_app_card(app, is_admin=False):
         if app.get('android_version'): 
             st.caption(f"🤖 Android Target: {app.get('android_version')}")
         
-        # Status Messages
         if status_str == 'PENDING': 
             st.info("⏳ පෝලිමේ ඇත...")
         elif status_str == 'PROCESSING': 
@@ -201,7 +202,7 @@ def render_app_card(app, is_admin=False):
         elif status_str == 'FAILED': 
             st.error(f"❌ {app.get('app_code', 'දෝෂයකි.')}")
             if st.button("🗑️ මේක මකලා අලුතින් හදන්න", key=f"del_fail_{app['id']}"):
-                supabase.table("generated_apps").delete().eq("id", app['id']).execute()
+                admin.get_admin_db().table("generated_apps").delete().eq("id", app['id']).execute()
                 st.rerun()
                 
         elif status_str == 'COMPLETED':
@@ -212,21 +213,20 @@ def render_app_card(app, is_admin=False):
                 edited_code = st.text_area("කේතය (Code):", value=current_code, height=350, key=f"edit_{app['id']}")
                 if st.button("💾 Save Changes", key=f"save_{app['id']}"):
                     if edited_code != current_code:
-                        update_db = admin.get_admin_db() if is_admin else supabase
+                        update_db = get_db(is_admin)
                         update_db.table("generated_apps").update({"app_code": edited_code}).eq("id", app['id']).execute()
                         try: 
                             update_db.table("app_versions").insert({"app_id": app['id'], "version_code": edited_code, "prompt_used": "Manual Edit"}).execute()
                         except Exception: 
                             pass 
-                        st.success("වෙනස්කම් සාර්ථකව Save කළා!"); 
-                        time.sleep(1); 
+                        st.success("වෙනස්කම් සාර්ථකව Save කළා!")
+                        time.sleep(1)
                         st.rerun()
                         
             with tab_preview:
                 if st.button("▶️ Run Preview", key=f"run_{app['id']}", type="primary"):
                     try:
-                        safe_code = re.sub(r'st\.set_page_config\s*\([^)]*\)', '', current_code)
-                        safe_code = re.sub(r'st\.footer\s*\([^)]*\)', '', safe_code)
+                        safe_code = clean_python_code(current_code)
                         safe_code = safe_code.replace("Import streamlit", "import streamlit")
                         st.markdown("### 📱 Live App Demo")
                         with st.container(border=True): 
@@ -236,7 +236,7 @@ def render_app_card(app, is_admin=False):
                         
             with tab_history:
                 try:
-                    hist_db = admin.get_admin_db() if is_admin else supabase
+                    hist_db = get_db(is_admin)
                     v_res = hist_db.table("app_versions").select("*").eq("app_id", app['id']).order("created_at", desc=True).execute()
                     if v_res.data:
                         for idx, v in enumerate(v_res.data):
@@ -244,7 +244,7 @@ def render_app_card(app, is_admin=False):
                                 v_time = v['created_at'][:19].replace('T', ' ')
                                 st.write(f"**Version {len(v_res.data) - idx}** | ⏰ {v_time}")
                                 st.caption(f"📝 {v.get('prompt_used', 'N/A')}")
-                                if st.button("🔄 Restore (මෙම සංස්කරණයට යන්න)", key=f"res_{v['id']}"):
+                                if st.button("🔄 Restore", key=f"res_{v['id']}"):
                                     hist_db.table("generated_apps").update({"app_code": v['version_code']}).eq("id", app['id']).execute()
                                     st.rerun()
                     else: 
@@ -258,12 +258,10 @@ def render_app_card(app, is_admin=False):
                     st.info("📱 **Android APK**")
                     if st.button("Build & Download APK", key=f"apk_{app['id']}", use_container_width=True):
                         try:
-                            # 🚨 MAGIC: SUPER URL CLEANER (මෙමගින් Space Errors සියල්ල ඉවත් වේ)
                             raw_token = st.secrets.get("GITHUB_TOKEN", "")
                             raw_repo = st.secrets.get("GITHUB_REPO", "")
-                            
-                            clean_token = "".join(raw_token.split())
-                            clean_repo = "".join(raw_repo.split())
+                            clean_token = re.sub(r'[^a-zA-Z0-9_.-]', '', raw_token)
+                            clean_repo = re.sub(r'[^a-zA-Z0-9_./-]', '', raw_repo)
                             
                             if not clean_token or not clean_repo:
                                 st.error("⚠️ කරුණාකර Streamlit Secrets වල `GITHUB_TOKEN` සහ `GITHUB_REPO` සකසන්න.")
@@ -289,8 +287,9 @@ def render_app_card(app, is_admin=False):
                                     dispatch_url = f"https://api.github.com/repos/{clean_repo}/dispatches"
                                     res = requests.post(dispatch_url, json=payload, headers=headers)
                                     
-                                    if res.status_code == 204: 
-                                        st.success("✅ APK Build කිරීම සාර්ථකයි! විනාඩි කිහිපයකින් GitHub Actions පරීක්ෂා කරන්න.")
+                                    if res.status_code == 204:
+                                        action_url = f"https://github.com/{clean_repo}/actions"
+                                        st.success(f"✅ APK Build කිරීම ආරම්භ විය! විනාඩි 2කින් [මෙතැනින් ගොස් (Click Here)]({action_url}) ඔබගේ ඇප් එක Download කරගන්න.")
                                     else: 
                                         st.error(f"❌ GitHub Action අසාර්ථකයි: {res.text}")
                         except Exception as e: 
@@ -326,7 +325,7 @@ def render_app_card(app, is_admin=False):
             if st.button("🚀 Update App with AI", key=f"ai_upd_{app['id']}", type="primary"):
                 if new_prompt:
                     new_hist = chat_hist + [{"role": "user", "content": new_prompt}]
-                    update_db = admin.get_admin_db() if is_admin else supabase
+                    update_db = get_db(is_admin)
                     
                     res_update = update_db.table("generated_apps").update({"status": "pending", "chat_history": new_hist, "app_code": current_code}).eq("id", app['id']).execute()
                     
@@ -347,13 +346,12 @@ def render_app_card(app, is_admin=False):
         if st.button("🔄 Refresh Status", key=f"ref_{app['id']}"): 
             st.rerun()
 
-# --- APP GENERATOR DASHBOARD ---
 def render_generator_dashboard():
     trigger_social_proof()
     st.markdown("### 🛠️ App Generation Engine")
     
-    # MAGIC FIX: දැන් Failed ඇප්ස් Limit එකට ගණන් ගන්නේ නෑ!
-    res_count = supabase.table("generated_apps").select("id", count="exact").eq("owner_id", st.session_state.user.id).neq("status", "failed").execute()
+    db = get_db(False)
+    res_count = db.table("generated_apps").select("id", count="exact").eq("owner_id", st.session_state.user.id).neq("status", "failed").execute()
     app_count = res_count.count if res_count.count else 0
     max_apps = 1 if st.session_state.package == 'free' else (10 if st.session_state.package == 'silver' else 9999)
     
@@ -402,14 +400,14 @@ def render_generator_dashboard():
                 if uploaded_file:
                     with st.spinner("☁️ File Uploading..."):
                         file_path = f"{st.session_state.user.id}/{int(time.time())}_{uploaded_file.name}"
-                        supabase.storage.from_("app_sources").upload(file_path, uploaded_file.getvalue())
-                        final_source_link = supabase.storage.from_("app_sources").get_public_url(file_path)
+                        db.storage.from_("app_sources").upload(file_path, uploaded_file.getvalue())
+                        final_source_link = db.storage.from_("app_sources").get_public_url(file_path)
 
                 if app_icon:
                     with st.spinner("☁️ Icon Uploading..."):
                         icon_path = f"{st.session_state.user.id}/icons/{int(time.time())}_{app_icon.name}"
-                        supabase.storage.from_("app_sources").upload(icon_path, app_icon.getvalue())
-                        icon_url = supabase.storage.from_("app_sources").get_public_url(icon_path)
+                        db.storage.from_("app_sources").upload(icon_path, app_icon.getvalue())
+                        icon_url = db.storage.from_("app_sources").get_public_url(icon_path)
 
                 insert_data = {
                     "owner_id": st.session_state.user.id, 
@@ -424,7 +422,7 @@ def render_generator_dashboard():
                     "icon_prompt": icon_prompt
                 }
 
-                res = supabase.table("generated_apps").insert(insert_data).execute()
+                res = db.table("generated_apps").insert(insert_data).execute()
                 if res.data:
                     groq_key = st.secrets.get("GROQ_API_KEY", "").strip()
                     gemini_key = st.secrets.get("GEMINI_KEY", "").strip()
@@ -440,7 +438,7 @@ def render_generator_dashboard():
 
     st.markdown("---")
     st.markdown("### 📂 ඔබගේ Apps")
-    apps_data = supabase.table("generated_apps").select("*").eq("owner_id", st.session_state.user.id).order("created_at", desc=True).execute()
+    apps_data = db.table("generated_apps").select("*").eq("owner_id", st.session_state.user.id).order("created_at", desc=True).execute()
     
     if apps_data.data:
         for app in apps_data.data:
@@ -448,7 +446,6 @@ def render_generator_dashboard():
     else: 
         st.info("ඔබ තවම කිසිදු ඇප් එකක් සාදා නැත.")
 
-# --- BEAUTIFUL UPGRADE UI ---
 def render_upgrade_section():
     trigger_social_proof()
     st.markdown("### 💳 Upgrade Your Package")
@@ -470,7 +467,6 @@ def render_upgrade_section():
         
     st.markdown("#### 🏦 ගෙවීම් කළ යුතු ගිණුම් විස්තර")
     
-    # MAGIC: Beautiful Gradient Cards for Payments!
     st.markdown(f"""
     <div style="display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 20px;">
         <div style="flex: 1; background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); padding: 25px; border-radius: 15px; color: white; box-shadow: 0 10px 20px rgba(0,0,0,0.2);">
@@ -495,11 +491,12 @@ def render_upgrade_section():
         if st.form_submit_button("Submit Payment", use_container_width=True):
             if slip_file:
                 with st.spinner("Uploading..."):
+                    db = get_db(False)
                     file_path = f"{st.session_state.user.id}/{int(time.time())}_{slip_file.name}"
-                    supabase.storage.from_("payment_slips").upload(file_path, slip_file.getvalue())
-                    slip_url = supabase.storage.from_("payment_slips").get_public_url(file_path)
+                    db.storage.from_("payment_slips").upload(file_path, slip_file.getvalue())
+                    slip_url = db.storage.from_("payment_slips").get_public_url(file_path)
                     
-                    supabase.table("payments").insert({
+                    db.table("payments").insert({
                         "user_id": st.session_state.user.id, 
                         "package_name": selected_pkg, 
                         "slip_url": slip_url, 
