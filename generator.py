@@ -32,7 +32,6 @@ def trigger_social_proof():
         st.session_state.show_toast = False 
 
 def clean_python_code(code_str):
-    # Indentation Error Fix
     code_str = code_str.replace("```python", "").replace("```", "").strip()
     lines = code_str.split('\n')
     while lines and not lines[0].strip():
