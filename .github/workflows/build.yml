@@ -10,13 +10,19 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      - name: 📥 Setup Java JDK
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Setup Java JDK
         uses: actions/setup-java@v4
         with:
-          java-version: '11'
+          java-version: '17'
           distribution: 'temurin'
 
       - name: 🤖 Generate Android Studio Project
+        env:
+          APP_NAME: ${{ github.event.client_payload.app_name }}
+          APP_URL: ${{ github.event.client_payload.app_url }}
         run: |
           mkdir -p app/src/main/java/com/aifactory/myapp
           mkdir -p app/src/main/res/values
@@ -30,7 +36,7 @@ jobs:
           cat << 'EOF' > build.gradle
           buildscript {
               repositories { google(); mavenCentral() }
-              dependencies { classpath 'com.android.tools.build:gradle:7.4.2' }
+              dependencies { classpath 'com.android.tools.build:gradle:8.1.1' }
           }
           allprojects {
               repositories { google(); mavenCentral() }
@@ -41,11 +47,11 @@ jobs:
           plugins { id 'com.android.application' }
           android {
               namespace 'com.aifactory.myapp'
-              compileSdk 33
+              compileSdk 34
               defaultConfig {
                   applicationId 'com.aifactory.myapp'
                   minSdk 21
-                  targetSdk 33
+                  targetSdk 34
                   versionCode 1
                   versionName '1.0'
               }
@@ -66,7 +72,7 @@ jobs:
 
           cat << EOF > app/src/main/res/values/strings.xml
           <?xml version="1.0" encoding="utf-8"?>
-          <resources><string name="app_name">${{ github.event.client_payload.app_name }}</string></resources>
+          <resources><string name="app_name">${APP_NAME}</string></resources>
           EOF
 
           cat << EOF > app/src/main/java/com/aifactory/myapp/MainActivity.java
@@ -79,7 +85,7 @@ jobs:
                   webView.getSettings().setJavaScriptEnabled(true);
                   webView.getSettings().setDomStorageEnabled(true);
                   webView.setWebViewClient(new WebViewClient());
-                  webView.loadUrl("${{ github.event.client_payload.app_url }}"); 
+                  webView.loadUrl("${APP_URL}"); 
                   setContentView(webView);
               }
           }
@@ -92,7 +98,7 @@ jobs:
           fi
 
       - name: 🛠️ Setup Gradle
-        uses: gradle/gradle-build-action@v3
+        uses: gradle/actions/setup-gradle@v3
 
       - name: 🏗️ Build APK
         run: gradle assembleDebug
