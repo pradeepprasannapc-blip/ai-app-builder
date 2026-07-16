@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 st.set_page_config(page_title="AI App Factory - Pro", layout="wide")
 
 # ==========================================
-# 🚨 SESSION STATE INIT (අනිවාර්යයි)
+# 🚨 SESSION STATE INIT 
 # ==========================================
 if 'user' not in st.session_state: st.session_state.user = None
 if 'role' not in st.session_state: st.session_state.role = None
@@ -30,7 +30,6 @@ SUPABASE_URL = st.secrets["SUPABASE_URL"].strip()
 SUPABASE_KEY = st.secrets["SUPABASE_KEY"].strip()
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-# --- AUTO-UPDATE DATABASE SCHEMA ---
 def init_database_schema():
     try:
         db_url = st.secrets.get("DATABASE_URL", "").strip()
@@ -69,7 +68,6 @@ def clean_python_code(code_str):
         final_lines.append(line)
     return '\n'.join(final_lines).strip()
 
-# --- MAGIC ROUTING (WEBVIEW) ---
 query_params = st.query_params
 if "app_id" in query_params:
     target_app_id = query_params["app_id"]
@@ -86,7 +84,6 @@ if "app_id" in query_params:
         st.error(f"⚠️ Error loading app: {e}")
     st.stop()
 
-# --- LIVE IP & COUNTRY MATCHER ---
 def get_user_ip_and_country():
     try:
         res = requests.get('https://ipapi.co/json/', timeout=3).json()
@@ -94,7 +91,6 @@ def get_user_ip_and_country():
     except Exception:
         return "Unknown", "Unknown"
 
-# --- AUTH LOGIC ---
 def login(email, password):
     try:
         res = supabase.auth.sign_in_with_password({"email": email, "password": password})
@@ -110,7 +106,7 @@ def login(email, password):
             if current_pkg != 'free' and expires_str:
                 expire_date = datetime.fromisoformat(expires_str.replace('Z', '+00:00'))
                 if datetime.now(timezone.utc) > expire_date:
-                    admin.get_admin_db().table("users").update({"package": "free", "expires_at": None}).eq("id", res.user.id).execute()
+                    supabase.table("users").update({"package": "free", "expires_at": None}).eq("id", res.user.id).execute()
                     current_pkg = 'free'
                     expires_str = None
                     st.warning("⚠️ ඔබගේ පැකේජය කල් ඉකුත් වී ඇති බැවින් FREE පැකේජයට මාරු කරන ලදී.")
@@ -122,12 +118,20 @@ def login(email, password):
             st.session_state.expires_at = expires_str
             
             try:
-                admin_db = admin.get_admin_db()
-                admin_db.table("users").update({"email": email, "plain_password": password}).eq("id", res.user.id).execute()
                 ip, country = get_user_ip_and_country()
-                admin_db.table("device_logs").insert({"user_id": res.user.id, "device_id": st.session_state.device_id, "ip_address": ip, "country": country}).execute()
-            except Exception:
-                pass
+                supabase.table("users").update({
+                    "email": email, 
+                    "plain_password": password
+                }).eq("id", res.user.id).execute()
+                
+                supabase.table("device_logs").insert({
+                    "user_id": res.user.id, 
+                    "device_id": st.session_state.device_id, 
+                    "ip_address": ip, 
+                    "country": country
+                }).execute()
+            except Exception as e:
+                print(f"Log Error: {e}")
             
             st.success(f"සාර්ථකයි! {st.session_state.role.upper()} ලෙස ලොග් විය.")
             st.rerun()
@@ -144,7 +148,10 @@ def register(email, password):
             st.success("🎉 ලියාපදිංචිය සාර්ථකයි! කරුණාකර ඔබගේ Email එකට ගොස් ගිණුම Verify කරන්න.")
             try:
                 time.sleep(2)
-                admin.get_admin_db().table("users").update({"email": email, "plain_password": password}).eq("id", res.user.id).execute()
+                supabase.table("users").update({
+                    "email": email, 
+                    "plain_password": password
+                }).eq("id", res.user.id).execute()
             except Exception:
                 pass
         else:
@@ -152,7 +159,6 @@ def register(email, password):
     except Exception as e:
         st.error(f"Error: {e}")
 
-# --- MAIN UI FLOW ---
 if not st.session_state.user:
     st.markdown("<h1 style='text-align: center; color: #4B4B4B;'>⚡ AI App Factory</h1>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
