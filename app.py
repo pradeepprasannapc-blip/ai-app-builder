@@ -77,7 +77,11 @@ if "app_id" in query_params:
             app_code = res.data[0]["app_code"]
             safe_code = clean_python_code(app_code)
             safe_code = safe_code.replace("Import streamlit", "import streamlit")
-            exec(safe_code, globals(), {})
+            
+            # 🚨 FIX: Supabase Injection
+            exec_globals = globals().copy()
+            exec_globals['supabase'] = supabase
+            exec(safe_code, exec_globals, {})
         else:
             st.error("⚠️ App not found or code is empty!")
     except Exception as e:
@@ -131,7 +135,7 @@ def login(email, password):
                     "country": country
                 }).execute()
             except Exception as e:
-                print(f"Log Error: {e}")
+                pass
             
             st.success(f"සාර්ථකයි! {st.session_state.role.upper()} ලෙස ලොග් විය.")
             st.rerun()
