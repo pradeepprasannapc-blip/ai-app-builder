@@ -43,6 +43,7 @@ def clean_python_code(code_str):
         if line.strip().startswith('st.set_page_config'): continue
         if line.strip().startswith('st.footer'): continue
         if line.strip().startswith('import streamlit'): continue
+        if 'supabase' in line and 'import' in line: continue
         final_lines.append(line)
     return '\n'.join(final_lines).strip()
 
@@ -171,7 +172,6 @@ def render_app_card(app, is_admin=False):
         if not isinstance(app, dict):
             return
             
-        # 🚨 FIX: 100% Unique prefix to prevent any Streamlit Duplicate Key errors
         prefix = f"adm_{app['id']}_" if is_admin else f"usr_{app['id']}_"
         status_val = app.get('status')
         status_str = str(status_val).upper() if status_val else "UNKNOWN"
@@ -241,9 +241,10 @@ def render_app_card(app, is_admin=False):
                                 exec_globals['supabase'] = get_db(is_admin)
                                 exec(safe_code, exec_globals, {})
                         except Exception as e: 
-                            st.error(f"Preview Error: {e}")
                             if "Could not find the table" in str(e):
-                                st.warning("💡 AI එක අලුත් Database Table එකක් හොයනවා. කරුණාකර පහළින් 'Refresh Status' ඔබන්න හෝ කේතය වෙනස් කරන්න.")
+                                st.warning("⏳ AI එක අලුත් දත්ත ගබඩාවක් නිර්මාණය කරමින් පවතී. කරුණාකර තත්පර 10කින් නැවත 'Run Preview' ඔබන්න.")
+                            else:
+                                st.error(f"Preview Error: {e}")
                             
                 with tab_history:
                     try:
@@ -267,7 +268,6 @@ def render_app_card(app, is_admin=False):
                     col1, col2 = st.columns(2)
                     with col1:
                         st.info("📱 **Android APK**")
-                        # 🚨 FIX: Direct Download Buttons UI
                         if st.button("🚀 1. Build APK", key=f"{prefix}buildapk", use_container_width=True):
                             try:
                                 raw_token = st.secrets.get("GITHUB_TOKEN", "")
@@ -299,7 +299,7 @@ def render_app_card(app, is_admin=False):
 
                         st.markdown("<br>", unsafe_allow_html=True)
                         if st.button("📥 2. Download Final APK", key=f"{prefix}chkapk", use_container_width=True, type="primary"):
-                            with st.spinner("📦 APK එක Download වෙමින් පවතී..."):
+                            with st.spinner("📦 APK එක සෙවීම..."):
                                 try:
                                     raw_token = st.secrets.get("GITHUB_TOKEN", "")
                                     raw_repo = st.secrets.get("GITHUB_REPO", "")
