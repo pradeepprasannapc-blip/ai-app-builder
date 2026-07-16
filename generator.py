@@ -37,10 +37,12 @@ def clean_python_code(code_str):
     while lines and not lines[0].strip():
         lines.pop(0)
     cleaned_code = textwrap.dedent('\n'.join(lines)).strip()
-    final_lines = []
+    
+    final_lines = ["import streamlit as st", "from supabase import create_client"]
     for line in cleaned_code.split('\n'):
         if line.strip().startswith('st.set_page_config'): continue
         if line.strip().startswith('st.footer'): continue
+        if line.strip().startswith('import streamlit'): continue
         final_lines.append(line)
     return '\n'.join(final_lines).strip()
 
@@ -169,13 +171,13 @@ def render_app_card(app, is_admin=False):
         if not isinstance(app, dict):
             return
             
-        prefix = "admin_" if is_admin else "user_"
+        # 🚨 FIX: 100% Unique prefix to prevent any Streamlit Duplicate Key errors
+        prefix = f"adm_{app['id']}_" if is_admin else f"usr_{app['id']}_"
         status_val = app.get('status')
         status_str = str(status_val).upper() if status_val else "UNKNOWN"
         app_name_val = app.get('app_name')
         app_name_safe = str(app_name_val) if app_name_val else "Untitled"
-        app_id_val = str(app.get('id', ''))
-        short_id = app_id_val[:8] if len(app_id_val) >= 8 else app_id_val
+        short_id = str(app['id'])[:8]
         
         header = f"📦 {app_name_safe} | Status: {status_str}"
         if is_admin:
@@ -188,11 +190,11 @@ def render_app_card(app, is_admin=False):
                 colA, colB = st.columns(2)
                 with colA:
                     vis = app.get('is_visible', True)
-                    if st.button("🔴 Hide App" if vis else "🟢 Make Public", key=f"{prefix}v_{app['id']}"):
+                    if st.button("🔴 Hide App" if vis else "🟢 Make Public", key=f"{prefix}vis"):
                         admin.get_admin_db().table("generated_apps").update({"is_visible": not vis}).eq("id", app['id']).execute()
                         st.rerun()
                 with colB:
-                    if st.button("🗑️ Force Delete App", key=f"{prefix}fd_{app['id']}", type="primary"):
+                    if st.button("🗑️ Force Delete App", key=f"{prefix}del", type="primary"):
                         admin.get_admin_db().table("generated_apps").delete().eq("id", app['id']).execute()
                         st.rerun()
                 st.markdown("---")
@@ -207,7 +209,7 @@ def render_app_card(app, is_admin=False):
                 st.warning("⚙️ AI එක මගින් කේතය ලියමින් පවතී... කරුණාකර රැඳී සිටින්න.")
             elif status_str == 'FAILED': 
                 st.error(f"❌ {app.get('app_code', 'දෝෂයකි.')}")
-                if st.button("🗑️ මේක මකලා අලුතින් හදන්න", key=f"{prefix}del_fail_{app['id']}"):
+                if st.button("🗑️ මේක මකලා අලුතින් හදන්න", key=f"{prefix}faildel"):
                     admin.get_admin_db().table("generated_apps").delete().eq("id", app['id']).execute()
                     st.rerun()
                     
@@ -216,8 +218,8 @@ def render_app_card(app, is_admin=False):
                 tab_code, tab_preview, tab_history, tab_export = st.tabs(["🧑‍💻 Code Editor", "👁️ Live Preview", "⏪ History", "📥 Export & APK"])
                 
                 with tab_code:
-                    edited_code = st.text_area("කේතය (Code):", value=current_code, height=350, key=f"{prefix}edit_{app['id']}")
-                    if st.button("💾 Save Changes", key=f"{prefix}save_{app['id']}"):
+                    edited_code = st.text_area("කේතය (Code):", value=current_code, height=350, key=f"{prefix}editor")
+                    if st.button("💾 Save Changes", key=f"{prefix}save"):
                         if edited_code != current_code:
                             update_db = get_db(is_admin)
                             update_db.table("generated_apps").update({"app_code": edited_code}).eq("id", app['id']).execute()
@@ -230,10 +232,9 @@ def render_app_card(app, is_admin=False):
                             st.rerun()
                             
                 with tab_preview:
-                    if st.button("▶️ Run Preview", key=f"{prefix}run_{app['id']}", type="primary"):
+                    if st.button("▶️ Run Preview", key=f"{prefix}runprev", type="primary"):
                         try:
                             safe_code = clean_python_code(current_code)
-                            safe_code = safe_code.replace("Import streamlit", "import streamlit")
                             st.markdown("### 📱 Live App Demo")
                             with st.container(border=True): 
                                 exec_globals = globals().copy()
@@ -241,6 +242,8 @@ def render_app_card(app, is_admin=False):
                                 exec(safe_code, exec_globals, {})
                         except Exception as e: 
                             st.error(f"Preview Error: {e}")
+                            if "Could not find the table" in str(e):
+                                st.warning("💡 AI එක අලුත් Database Table එකක් හොයනවා. කරුණාකර පහළින් 'Refresh Status' ඔබන්න හෝ කේතය වෙනස් කරන්න.")
                             
                 with tab_history:
                     try:
@@ -264,7 +267,8 @@ def render_app_card(app, is_admin=False):
                     col1, col2 = st.columns(2)
                     with col1:
                         st.info("📱 **Android APK**")
-                        if st.button("🚀 Build APK Now", key=f"{prefix}apk_{app['id']}", use_container_width=True):
+                        # 🚨 FIX: Direct Download Buttons UI
+                        if st.button("🚀 1. Build APK", key=f"{prefix}buildapk", use_container_width=True):
                             try:
                                 raw_token = st.secrets.get("GITHUB_TOKEN", "")
                                 raw_repo = st.secrets.get("GITHUB_REPO", "")
@@ -274,7 +278,7 @@ def render_app_card(app, is_admin=False):
                                 if not clean_token or not clean_repo:
                                     st.error("⚠️ කරුණාකර Streamlit Secrets වල GITHUB_TOKEN සහ GITHUB_REPO සකසන්න.")
                                 else:
-                                    with st.spinner("🚀 GitHub Action එක Trigger කරමින් පවතී..."):
+                                    with st.spinner("🚀 Build කරමින් පවතී..."):
                                         headers = {"Accept": "application/vnd.github.v3+json", "Authorization": f"token {clean_token}"}
                                         custom_app_url = f"https://ai-app-builder-x6qbi2k3iobvvzqbktkfma.streamlit.app/?app_id={str(app['id'])}"
                                         payload = {
@@ -287,15 +291,15 @@ def render_app_card(app, is_admin=False):
                                         }
                                         res = requests.post(f"https://api.github.com/repos/{clean_repo}/dispatches", json=payload, headers=headers)
                                         if res.status_code == 204:
-                                            st.success(f"✅ APK Build කිරීම ආරම්භ විය! විනාඩි 2කින් පහත බොත්තම ඔබා Download කරගන්න.")
+                                            st.success(f"✅ APK එක සෑදීම ආරම්භ විය! කරුණාකර විනාඩි 2ක් හෝ 3ක් රැඳී සිට පහත බොත්තම ඔබන්න.")
                                         else: 
-                                            st.error(f"❌ GitHub Action අසාර්ථකයි: {res.text}")
+                                            st.error(f"❌ Error: {res.text}")
                             except Exception as e: 
                                 st.error(f"Error: {e}")
 
                         st.markdown("<br>", unsafe_allow_html=True)
-                        if st.button("📥 Check & Download Final APK", key=f"{prefix}chk_apk_{app['id']}", use_container_width=True):
-                            with st.spinner("📦 APK එක සෙවීම..."):
+                        if st.button("📥 2. Download Final APK", key=f"{prefix}chkapk", use_container_width=True, type="primary"):
+                            with st.spinner("📦 APK එක Download වෙමින් පවතී..."):
                                 try:
                                     raw_token = st.secrets.get("GITHUB_TOKEN", "")
                                     raw_repo = st.secrets.get("GITHUB_REPO", "")
@@ -315,10 +319,10 @@ def render_app_card(app, is_admin=False):
                                             dl_url = artifact['archive_download_url']
                                             zip_req = requests.get(dl_url, headers=headers)
                                             if zip_req.status_code == 200:
-                                                st.download_button("✅ Download Now (Click Here)", data=zip_req.content, file_name=f"{target_name}.zip", mime="application/zip", key=f"{prefix}dl_btn_{app['id']}")
+                                                st.download_button("✅ මෙතන ඔබලා Download කරගන්න", data=zip_req.content, file_name=f"{target_name}.zip", mime="application/zip", key=f"{prefix}dlbtn")
                                                 st.balloons()
                                             else:
-                                                st.error("APK එක Download කිරීමට නොහැක.")
+                                                st.error("APK එක ලබා ගැනීමට නොහැක.")
                                         else:
                                             st.warning("⚠️ තවම APK එක හැදෙමින් පවතී. කරුණාකර තව විනාඩියකින් නැවත බලන්න.")
                                     else:
@@ -337,7 +341,7 @@ def render_app_card(app, is_admin=False):
                             st.download_button(
                                 "Download ZIP", data=zip_buffer.getvalue(), 
                                 file_name=f"{app_name_safe.replace(' ', '_')}.zip", mime="application/zip", 
-                                key=f"{prefix}zip_{app['id']}", use_container_width=True
+                                key=f"{prefix}zip", use_container_width=True
                             )
                         else: 
                             st.error("🔒 Source Code ලබා ගැනීමට Gold Package එකට Upgrade කරන්න.")
@@ -348,9 +352,9 @@ def render_app_card(app, is_admin=False):
                 for msg in chat_hist: 
                     st.info(f"🧑‍💻 **ඔබ:** {msg['content']}")
                     
-                new_prompt = st.text_input("ඔබට අලුතින් එකතු කරගන්න ඕන දේ මෙතන කියන්න...", key=f"{prefix}prompt_{app['id']}")
+                new_prompt = st.text_input("ඔබට අලුතින් එකතු කරගන්න ඕන දේ මෙතන කියන්න...", key=f"{prefix}prompt")
                 
-                if st.button("🚀 Update App with AI", key=f"{prefix}ai_upd_{app['id']}", type="primary"):
+                if st.button("🚀 Update App with AI", key=f"{prefix}aiupd", type="primary"):
                     if new_prompt:
                         new_hist = chat_hist + [{"role": "user", "content": new_prompt}]
                         update_db = get_db(is_admin)
@@ -371,7 +375,7 @@ def render_app_card(app, is_admin=False):
                     else: 
                         st.warning("කරුණාකර වෙනස්කම ටයිප් කරන්න.")
                         
-            if st.button("🔄 Refresh Status", key=f"{prefix}ref_{app['id']}"): 
+            if st.button("🔄 Refresh Status", key=f"{prefix}ref"): 
                 st.rerun()
     except Exception as e:
         pass
