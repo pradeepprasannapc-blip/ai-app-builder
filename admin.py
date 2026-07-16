@@ -62,7 +62,7 @@ def render_god_mode():
         for u in users_res.data:
             role_str = str(u.get('role') or 'user').upper()
             pkg_str = str(u.get('package') or 'free').upper()
-            email_str = u.get('email') or f"User ID: {u['id'][:8]}..."
+            email_str = u.get('email') or f"User ID: {str(u.get('id', ''))[:8]}..."
             
             ip_str = "No IP logged"
             country_str = "Unknown"
