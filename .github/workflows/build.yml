@@ -19,52 +19,36 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: 🛠️ Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: '8.4'
-
       - name: 🤖 Generate Android Studio Project
         env:
           APP_NAME: ${{ github.event.client_payload.app_name }}
           APP_URL: ${{ github.event.client_payload.app_url }}
         run: |
+          echo "🚀 Setting up Android project structure..."
           mkdir -p app/src/main/java/com/aifactory/myapp
           mkdir -p app/src/main/res/values
           mkdir -p app/src/main/res/mipmap-xxxhdpi
 
-          # 1. settings.gradle
           cat << 'EOF' > settings.gradle
           pluginManagement {
-              repositories {
-                  google()
-                  mavenCentral()
-                  gradlePluginPortal()
-              }
+              repositories { google(); mavenCentral(); gradlePluginPortal() }
           }
           dependencyResolutionManagement {
               repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-              repositories {
-                  google()
-                  mavenCentral()
-              }
+              repositories { google(); mavenCentral() }
           }
           rootProject.name = "AI_App"
           include ':app'
           EOF
 
-          # 2. Top-level build.gradle
           cat << 'EOF' > build.gradle
           plugins {
               id 'com.android.application' version '8.1.1' apply false
           }
           EOF
 
-          # 3. App-level build.gradle
           cat << 'EOF' > app/build.gradle
-          plugins {
-              id 'com.android.application'
-          }
+          plugins { id 'com.android.application' }
           android {
               namespace 'com.aifactory.myapp'
               compileSdk 34
@@ -82,19 +66,12 @@ jobs:
           }
           EOF
 
-          # 4. AndroidManifest.xml
           cat << 'EOF' > app/src/main/AndroidManifest.xml
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <uses-permission android:name="android.permission.INTERNET" />
-              <application
-                  android:allowBackup="true"
-                  android:icon="@mipmap/ic_launcher"
-                  android:label="@string/app_name"
-                  android:theme="@android:style/Theme.NoTitleBar">
-                  <activity
-                      android:name=".MainActivity"
-                      android:exported="true">
+              <application android:allowBackup="true" android:icon="@mipmap/ic_launcher" android:label="@string/app_name" android:theme="@android:style/Theme.NoTitleBar">
+                  <activity android:name=".MainActivity" android:exported="true">
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN" />
                           <category android:name="android.intent.category.LAUNCHER" />
@@ -104,25 +81,18 @@ jobs:
           </manifest>
           EOF
 
-          # 5. strings.xml (Dynamic App Name)
+          # Protect against special characters in App Name breaking the XML
+          SAFE_APP_NAME=$(echo "${APP_NAME:-My AI App}" | sed 's/&/&amp;/g; s/</&lt;/g; s/>/&gt;/g')
           cat << EOF > app/src/main/res/values/strings.xml
           <?xml version="1.0" encoding="utf-8"?>
-          <resources>
-              <string name="app_name">${APP_NAME}</string>
-          </resources>
+          <resources><string name="app_name">${SAFE_APP_NAME}</string></resources>
           EOF
 
-          # 6. MainActivity.java (Dynamic URL)
           cat << EOF > app/src/main/java/com/aifactory/myapp/MainActivity.java
           package com.aifactory.myapp;
-          import android.app.Activity;
-          import android.os.Bundle;
-          import android.webkit.WebView;
-          import android.webkit.WebViewClient;
-          
+          import android.app.Activity; import android.os.Bundle; import android.webkit.WebView; import android.webkit.WebViewClient;
           public class MainActivity extends Activity {
-              @Override
-              protected void onCreate(Bundle savedInstanceState) {
+              @Override protected void onCreate(Bundle savedInstanceState) {
                   super.onCreate(savedInstanceState);
                   WebView webView = new WebView(this);
                   webView.getSettings().setJavaScriptEnabled(true);
@@ -134,14 +104,19 @@ jobs:
           }
           EOF
 
-      - name: 🎨 Download Custom App Icon
+      - name: 🎨 Setup App Icon (Fix Missing Icon Error)
         run: |
+          # 🚨 මේක තමයි මැජික් එක! Logo එකක් නැත්නම් Default හිස් Icon එකක් හදන්න
+          echo "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==" | base64 -d > app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+          
           if [ "${{ github.event.client_payload.app_icon_url }}" != "" ]; then
             curl -s -L -o app/src/main/res/mipmap-xxxhdpi/ic_launcher.png "${{ github.event.client_payload.app_icon_url }}"
           fi
 
       - name: 🏗️ Build APK
-        run: gradle assembleDebug --no-daemon
+        run: |
+          gradle wrapper --gradle-version 8.4
+          ./gradlew assembleDebug --no-daemon
 
       - name: 📦 Upload APK
         uses: actions/upload-artifact@v4
