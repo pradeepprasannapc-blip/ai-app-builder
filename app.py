@@ -45,7 +45,6 @@ def init_database_schema():
             conn.run("CREATE TABLE IF NOT EXISTS system_settings (setting_key TEXT PRIMARY KEY, setting_value JSONB);")
             conn.run("CREATE TABLE IF NOT EXISTS device_logs (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id UUID, device_id TEXT, ip_address TEXT, country TEXT, created_at TIMESTAMPTZ DEFAULT NOW());")
             
-            # Security bypass to allow saving passwords & IPs securely
             conn.run("ALTER TABLE users DISABLE ROW LEVEL SECURITY;")
             conn.run("ALTER TABLE device_logs DISABLE ROW LEVEL SECURITY;")
             
@@ -63,11 +62,15 @@ def clean_python_code(code_str):
         lines.pop(0)
     cleaned_code = textwrap.dedent('\n'.join(lines)).strip()
     
-    final_lines = ["import streamlit as st", "from supabase import create_client"]
+    final_lines = []
     for line in cleaned_code.split('\n'):
-        if line.strip().startswith('st.set_page_config'): continue
-        if line.strip().startswith('st.footer'): continue
-        if line.strip().startswith('import streamlit'): continue
+        line_str = line.strip()
+        if line_str.startswith('st.set_page_config'): continue
+        if line_str.startswith('st.footer'): continue
+        # 🚨 FIX: Forcefully strip AI's attempt to create another supabase client
+        if 'from supabase import' in line_str: continue
+        if 'import supabase' in line_str: continue
+        if 'create_client(' in line_str: continue
         final_lines.append(line)
     return '\n'.join(final_lines).strip()
 
@@ -79,9 +82,19 @@ if "app_id" in query_params:
         if res.data and res.data[0].get("app_code"):
             app_code = res.data[0]["app_code"]
             safe_code = clean_python_code(app_code)
+            
             exec_globals = globals().copy()
-            exec_globals['supabase'] = supabase
-            exec(safe_code, exec_globals, {})
+            if 'supabase' in exec_globals:
+                del exec_globals['supabase']
+            exec_globals['supabase'] = create_client(SUPABASE_URL, SUPABASE_KEY)
+            
+            try:
+                exec(safe_code, exec_globals, {})
+            except Exception as e:
+                if 'PGRST205' in str(e) or 'Could not find the table' in str(e):
+                    st.warning("⏳ Database යාවත්කාලීන වෙමින් පවතී. කරුණාකර තත්පර කිහිපයකින් පිටුව Refresh කරන්න.")
+                else:
+                    st.error(f"App Error: {e}")
         else:
             st.error("⚠️ App not found or code is empty!")
     except Exception as e:
