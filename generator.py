@@ -42,7 +42,7 @@ def clean_python_code(code_str):
     for line in cleaned_code.split('\n'):
         if line.strip().startswith('st.set_page_config'): continue
         if line.strip().startswith('st.footer'): continue
-        if line.strip().startswith('import streamlit'): continue
+        if 'import streamlit' in line: continue
         if 'supabase' in line and 'import' in line: continue
         final_lines.append(line)
     return '\n'.join(final_lines).strip()
@@ -293,9 +293,9 @@ def render_app_card(app, is_admin=False):
                                         if res.status_code == 204:
                                             st.success(f"✅ APK එක සෑදීම ආරම්භ විය! කරුණාකර විනාඩි 2ක් හෝ 3ක් රැඳී සිට පහත බොත්තම ඔබන්න.")
                                         else: 
-                                            st.error(f"❌ Error: {res.text}")
+                                            st.error(f"❌ Error: (Status {res.status_code}) - {res.text}")
                             except Exception as e: 
-                                st.error(f"Error: {e}")
+                                st.error(f"⚠️ Network Error: {e}")
 
                         st.markdown("<br>", unsafe_allow_html=True)
                         if st.button("📥 2. Download Final APK", key=f"{prefix}chkapk", use_container_width=True, type="primary"):
@@ -378,7 +378,7 @@ def render_app_card(app, is_admin=False):
             if st.button("🔄 Refresh Status", key=f"{prefix}ref"): 
                 st.rerun()
     except Exception as e:
-        pass
+        st.error(f"⚠️ App Card Error: {str(e)}")
 
 def render_generator_dashboard():
     trigger_social_proof()
