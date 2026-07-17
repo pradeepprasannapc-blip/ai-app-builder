@@ -40,8 +40,13 @@ def clean_python_code(code_str):
     
     final_lines = []
     for line in cleaned_code.split('\n'):
-        if line.strip().startswith('st.set_page_config'): continue
-        if line.strip().startswith('st.footer'): continue
+        line_str = line.strip()
+        if line_str.startswith('st.set_page_config'): continue
+        if line_str.startswith('st.footer'): continue
+        # 🚨 FIX: Remove all AI generated Supabase initializations
+        if 'from supabase import' in line_str: continue
+        if 'import supabase' in line_str: continue
+        if 'create_client(' in line_str: continue
         final_lines.append(line)
     return '\n'.join(final_lines).strip()
 
@@ -232,13 +237,23 @@ def render_app_card(app, is_admin=False):
                 with tab_preview:
                     if st.button("▶️ Run Preview", key=f"{prefix}runprev", type="primary"):
                         try:
-                            # 🚨 FIX: Now executing cleanly without forcing global injections
                             safe_code = clean_python_code(current_code)
                             st.markdown("### 📱 Live App Demo")
                             with st.container(border=True): 
-                                exec(safe_code, globals(), {})
+                                exec_globals = globals().copy()
+                                if 'supabase' in exec_globals:
+                                    del exec_globals['supabase']
+                                exec_globals['supabase'] = get_db(is_admin)
+                                
+                                try:
+                                    exec(safe_code, exec_globals, {})
+                                except Exception as inner_e:
+                                    if 'PGRST205' in str(inner_e) or 'Could not find the table' in str(inner_e):
+                                        st.warning("⏳ AI එක අලුත් දත්ත ගබඩාවක් (Database Table) නිර්මාණය කරමින් පවතී. කරුණාකර තත්පර 15කින් පමණ නැවත 'Run Preview' ඔබන්න.")
+                                    else:
+                                        st.error(f"Preview Error: {inner_e}")
                         except Exception as e: 
-                            st.error(f"Preview Error: {e}")
+                            st.error(f"Preview Initialization Error: {e}")
                             
                 with tab_history:
                     try:
