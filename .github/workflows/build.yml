@@ -55,7 +55,7 @@ jobs:
           }
           ''')
 
-          # 3. App-level build.gradle
+          # 3. App-level build.gradle (🚨 FIX: Added Java 17 Compile Options)
           with open('app/build.gradle', 'w') as f:
               f.write('''
           plugins { id 'com.android.application' }
@@ -64,10 +64,14 @@ jobs:
               compileSdk 34
               defaultConfig {
                   applicationId 'com.aifactory.myapp'
-                  minSdk 21
+                  minSdk 21  
                   targetSdk 34
                   versionCode 1
                   versionName '1.0'
+              }
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
               }
           }
           ''')
@@ -131,8 +135,10 @@ jobs:
             echo "⚠️ No icon provided. (Default Android Icon will be used)"
           fi
 
-      - name: 🏗️ Build APK (Compiling)
-        run: gradle assembleDebug
+      - name: 🏗️ Generate Gradle Wrapper & Build APK
+        run: |
+          gradle wrapper --gradle-version 8.2
+          ./gradlew assembleDebug
 
       - name: 📦 Upload APK to User
         uses: actions/upload-artifact@v4
