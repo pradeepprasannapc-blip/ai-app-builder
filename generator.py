@@ -38,12 +38,10 @@ def clean_python_code(code_str):
         lines.pop(0)
     cleaned_code = textwrap.dedent('\n'.join(lines)).strip()
     
-    final_lines = ["import streamlit as st", "from supabase import create_client"]
+    final_lines = []
     for line in cleaned_code.split('\n'):
         if line.strip().startswith('st.set_page_config'): continue
         if line.strip().startswith('st.footer'): continue
-        if 'import streamlit' in line: continue
-        if 'supabase' in line and 'import' in line: continue
         final_lines.append(line)
     return '\n'.join(final_lines).strip()
 
@@ -234,17 +232,13 @@ def render_app_card(app, is_admin=False):
                 with tab_preview:
                     if st.button("▶️ Run Preview", key=f"{prefix}runprev", type="primary"):
                         try:
+                            # 🚨 FIX: Now executing cleanly without forcing global injections
                             safe_code = clean_python_code(current_code)
                             st.markdown("### 📱 Live App Demo")
                             with st.container(border=True): 
-                                exec_globals = globals().copy()
-                                exec_globals['supabase'] = get_db(is_admin)
-                                exec(safe_code, exec_globals, {})
+                                exec(safe_code, globals(), {})
                         except Exception as e: 
-                            if "Could not find the table" in str(e):
-                                st.warning("⏳ AI එක අලුත් දත්ත ගබඩාවක් නිර්මාණය කරමින් පවතී. කරුණාකර තත්පර 10කින් නැවත 'Run Preview' ඔබන්න.")
-                            else:
-                                st.error(f"Preview Error: {e}")
+                            st.error(f"Preview Error: {e}")
                             
                 with tab_history:
                     try:
