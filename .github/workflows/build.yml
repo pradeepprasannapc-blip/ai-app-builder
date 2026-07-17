@@ -19,104 +19,95 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
+      - name: 🛠️ Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.4'
+
       - name: 🤖 Generate Android Studio Project
         env:
           APP_NAME: ${{ github.event.client_payload.app_name }}
           APP_URL: ${{ github.event.client_payload.app_url }}
         run: |
-          echo "🚀 Setting up Android project structure..."
-          mkdir -p app/src/main/java/com/aifactory/myapp
-          mkdir -p app/src/main/res/values
-          mkdir -p app/src/main/res/mipmap-xxxhdpi
+          cat << 'EOF' > generate.py
+          import os
+          import json
+          import xml.sax.saxutils as saxutils
 
-          cat << 'EOF' > settings.gradle
-          pluginManagement {
-              repositories { google(); mavenCentral(); gradlePluginPortal() }
-          }
-          dependencyResolutionManagement {
-              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-              repositories { google(); mavenCentral() }
-          }
-          rootProject.name = "AI_App"
-          include ':app'
-          EOF
+          app_name = os.environ.get('APP_NAME', 'My AI App')
+          app_url = os.environ.get('APP_URL', 'https://google.com')
 
-          cat << 'EOF' > build.gradle
-          plugins {
-              id 'com.android.application' version '8.1.1' apply false
-          }
-          EOF
+          safe_app_name = saxutils.escape(app_name).replace("'", "\\'")
+          safe_app_url = json.dumps(app_url)
 
-          cat << 'EOF' > app/build.gradle
-          plugins { id 'com.android.application' }
-          android {
+          os.makedirs('app/src/main/java/com/aifactory/myapp', exist_ok=True)
+          os.makedirs('app/src/main/res/values', exist_ok=True)
+          os.makedirs('app/src/main/res/mipmap-xxxhdpi', exist_ok=True)
+
+          with open('settings.gradle', 'w') as f:
+              f.write("pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }\ndependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }\nrootProject.name = 'AI_App'\ninclude ':app'\n")
+
+          with open('build.gradle', 'w') as f:
+              f.write("plugins { id 'com.android.application' version '8.1.1' apply false }\n")
+
+          with open('app/build.gradle', 'w') as f:
+              f.write(f"""plugins {{ id 'com.android.application' }}
+          android {{
               namespace 'com.aifactory.myapp'
               compileSdk 34
-              defaultConfig {
-                  applicationId "com.aifactory.myapp"
+              defaultConfig {{
+                  applicationId 'com.aifactory.myapp'
                   minSdk 24
                   targetSdk 34
                   versionCode 1
-                  versionName "1.0"
-              }
-              compileOptions {
+                  versionName '1.0'
+              }}
+              buildTypes {{
+                  debug {{ crunchPngs false }}
+                  release {{ crunchPngs false }}
+              }}
+              compileOptions {{
                   sourceCompatibility JavaVersion.VERSION_17
                   targetCompatibility JavaVersion.VERSION_17
-              }
-          }
-          EOF
+              }}
+          }}""")
 
-          cat << 'EOF' > app/src/main/AndroidManifest.xml
-          <?xml version="1.0" encoding="utf-8"?>
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <uses-permission android:name="android.permission.INTERNET" />
-              <application android:allowBackup="true" android:icon="@mipmap/ic_launcher" android:label="@string/app_name" android:theme="@android:style/Theme.NoTitleBar">
-                  <activity android:name=".MainActivity" android:exported="true">
-                      <intent-filter>
-                          <action android:name="android.intent.action.MAIN" />
-                          <category android:name="android.intent.category.LAUNCHER" />
-                      </intent-filter>
-                  </activity>
-              </application>
-          </manifest>
-          EOF
+          with open('app/src/main/AndroidManifest.xml', 'w') as f:
+              f.write('<?xml version="1.0" encoding="utf-8"?>\n<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n<uses-permission android:name="android.permission.INTERNET" />\n<application android:allowBackup="true" android:icon="@mipmap/ic_launcher" android:label="@string/app_name" android:theme="@android:style/Theme.NoTitleBar">\n<activity android:name=".MainActivity" android:exported="true">\n<intent-filter>\n<action android:name="android.intent.action.MAIN" />\n<category android:name="android.intent.category.LAUNCHER" />\n</intent-filter>\n</activity>\n</application>\n</manifest>')
 
-          # Protect against special characters in App Name breaking the XML
-          SAFE_APP_NAME=$(echo "${APP_NAME:-My AI App}" | sed 's/&/&amp;/g; s/</&lt;/g; s/>/&gt;/g')
-          cat << EOF > app/src/main/res/values/strings.xml
-          <?xml version="1.0" encoding="utf-8"?>
-          <resources><string name="app_name">${SAFE_APP_NAME}</string></resources>
-          EOF
+          with open('app/src/main/res/values/strings.xml', 'w') as f:
+              f.write(f'<?xml version="1.0" encoding="utf-8"?>\n<resources><string name="app_name">{safe_app_name}</string></resources>')
 
-          cat << EOF > app/src/main/java/com/aifactory/myapp/MainActivity.java
-          package com.aifactory.myapp;
-          import android.app.Activity; import android.os.Bundle; import android.webkit.WebView; import android.webkit.WebViewClient;
-          public class MainActivity extends Activity {
-              @Override protected void onCreate(Bundle savedInstanceState) {
-                  super.onCreate(savedInstanceState);
-                  WebView webView = new WebView(this);
-                  webView.getSettings().setJavaScriptEnabled(true);
-                  webView.getSettings().setDomStorageEnabled(true);
-                  webView.setWebViewClient(new WebViewClient());
-                  webView.loadUrl("${APP_URL}");
-                  setContentView(webView);
-              }
-          }
+          with open('app/src/main/java/com/aifactory/myapp/MainActivity.java', 'w') as f:
+              f.write(f'package com.aifactory.myapp;\nimport android.app.Activity;\nimport android.os.Bundle;\nimport android.webkit.WebView;\nimport android.webkit.WebViewClient;\npublic class MainActivity extends Activity {{\n@Override protected void onCreate(Bundle savedInstanceState) {{\nsuper.onCreate(savedInstanceState);\nWebView webView = new WebView(this);\nwebView.getSettings().setJavaScriptEnabled(true);\nwebView.getSettings().setDomStorageEnabled(true);\nwebView.setWebViewClient(new WebViewClient());\nwebView.loadUrl({safe_app_url});\nsetContentView(webView);\n}}\n}}')
           EOF
+          python3 generate.py
 
-      - name: 🎨 Setup App Icon (Fix Missing Icon Error)
+      - name: 🎨 Setup App Icon (Custom + Fallback)
+        env:
+          ICON_URL: ${{ github.event.client_payload.app_icon_url }}
         run: |
-          # 🚨 මේක තමයි මැජික් එක! Logo එකක් නැත්නම් Default හිස් Icon එකක් හදන්න
+          mkdir -p app/src/main/res/mipmap-xxxhdpi
+          
+          # 1. Safety Net: Create a default valid 1x1 PNG just in case
           echo "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==" | base64 -d > app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
           
-          if [ "${{ github.event.client_payload.app_icon_url }}" != "" ]; then
-            curl -s -L -o app/src/main/res/mipmap-xxxhdpi/ic_launcher.png "${{ github.event.client_payload.app_icon_url }}"
+          # 2. Download user's custom icon if provided
+          if [ "$ICON_URL" != "" ] && [ "$ICON_URL" != "null" ]; then
+            echo "Downloading custom icon..."
+            curl -s -L -o custom_icon.tmp "$ICON_URL"
+            
+            # Verify if file is successfully downloaded and not empty
+            if [ -s custom_icon.tmp ]; then
+              mv custom_icon.tmp app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+              echo "Custom icon applied successfully!"
+            else
+              echo "Failed to download custom icon. Using default."
+            fi
           fi
 
       - name: 🏗️ Build APK
-        run: |
-          gradle wrapper --gradle-version 8.4
-          ./gradlew assembleDebug --no-daemon
+        run: gradle assembleDebug --no-daemon
 
       - name: 📦 Upload APK
         uses: actions/upload-artifact@v4
