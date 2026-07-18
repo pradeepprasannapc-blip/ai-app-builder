@@ -67,8 +67,8 @@ def clean_python_code(code_str):
         line_str = line.strip()
         if line_str.startswith('st.set_page_config'): continue
         if line_str.startswith('st.footer'): continue
-        if 'from supabase import' in line_str: continue
-        if 'import supabase' in line_str: continue
+        # යාවත්කාලීන කළ කොටස - Supabase Imports සම්පූර්ණයෙන්ම ඉවත් කිරීම
+        if 'import supabase' in line_str or 'from supabase' in line_str: continue
         if 'create_client(' in line_str: continue
         final_lines.append(line)
     return '\n'.join(final_lines).strip()
@@ -86,7 +86,7 @@ if "app_id" in query_params:
             if 'supabase' in exec_globals:
                 del exec_globals['supabase']
             exec_globals['supabase'] = create_client(SUPABASE_URL, SUPABASE_KEY)
-            exec_globals['__name__'] = '__main__'  # 🚨 Added this critical fix to app.py!
+            exec_globals['__name__'] = '__main__'
             
             try:
                 exec(safe_code, exec_globals)
