@@ -67,7 +67,6 @@ def clean_python_code(code_str):
         line_str = line.strip()
         if line_str.startswith('st.set_page_config'): continue
         if line_str.startswith('st.footer'): continue
-        # 🚨 FIX: Forcefully strip AI's attempt to create another supabase client
         if 'from supabase import' in line_str: continue
         if 'import supabase' in line_str: continue
         if 'create_client(' in line_str: continue
@@ -87,9 +86,10 @@ if "app_id" in query_params:
             if 'supabase' in exec_globals:
                 del exec_globals['supabase']
             exec_globals['supabase'] = create_client(SUPABASE_URL, SUPABASE_KEY)
+            exec_globals['__name__'] = '__main__'  # 🚨 Added this critical fix to app.py!
             
             try:
-                exec(safe_code, exec_globals, {})
+                exec(safe_code, exec_globals)
             except Exception as e:
                 if 'PGRST205' in str(e) or 'Could not find the table' in str(e):
                     st.warning("⏳ Database යාවත්කාලීන වෙමින් පවතී. කරුණාකර තත්පර කිහිපයකින් පිටුව Refresh කරන්න.")
