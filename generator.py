@@ -43,7 +43,6 @@ def clean_python_code(code_str):
         line_str = line.strip()
         if line_str.startswith('st.set_page_config'): continue
         if line_str.startswith('st.footer'): continue
-        # 🚨 FIX: Remove all AI generated Supabase initializations
         if 'from supabase import' in line_str: continue
         if 'import supabase' in line_str: continue
         if 'create_client(' in line_str: continue
@@ -245,8 +244,12 @@ def render_app_card(app, is_admin=False):
                                     del exec_globals['supabase']
                                 exec_globals['supabase'] = get_db(is_admin)
                                 
+                                # 🚨 FIX: Force Python to recognize this as the main file to trigger __name__ == "__main__"
+                                exec_globals['__name__'] = '__main__'
+                                
                                 try:
-                                    exec(safe_code, exec_globals, {})
+                                    # 🚨 FIX: Safe execution mapping both globals and locals
+                                    exec(safe_code, exec_globals)
                                 except Exception as inner_e:
                                     if 'PGRST205' in str(inner_e) or 'Could not find the table' in str(inner_e):
                                         st.warning("⏳ AI එක අලුත් දත්ත ගබඩාවක් (Database Table) නිර්මාණය කරමින් පවතී. කරුණාකර තත්පර 15කින් පමණ නැවත 'Run Preview' ඔබන්න.")
