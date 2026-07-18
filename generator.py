@@ -100,10 +100,26 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
                     
         safe_prefix = re.sub(r'[^a-zA-Z0-9]', '', str(app_data.get('app_name', 'app'))).lower()
         if not safe_prefix: safe_prefix = "custom_app"
-                    
+        
+        # 🪄 SUPER MAGIC: Advanced Constraint Handling
+        auth_instruction = ""
+        user_prompt_lower = last_user_prompt.lower()
+        if any(word in user_prompt_lower for word in ["ඕනි නෑ", "ඕනෙ නෑ", "එපා", "නොමැතිව", "no login", "no auth", "without login"]):
+            auth_instruction = """
+            🚨🚨🚨 [ABSOLUTE CRITICAL DIRECTIVE - NO AUTHENTICATION] 🚨🚨🚨
+            The user has STRICTLY FORBIDDEN Login and Registration functionalities. 
+            YOU MUST NOT generate any forms for login or registration. 
+            YOU MUST NOT write functions like 'def login_user' or 'def register_user'.
+            YOU MUST NOT use `st.text_input(..., type='password')`.
+            IGNORE your standard SaaS/App templates.
+            START THE MAIN APP CONTENT (like viewing videos, playing, etc.) DIRECTLY on the home page!
+            """
+
         db_prompt = f"""
         You are an expert PostgreSQL Database Architect.
         The user wants an app based on this request: "{last_user_prompt}"
+        
+        {auth_instruction}
         
         Does this app need a database to store dynamic data (e.g., users, products, posts, tasks)?
         If YES: Write ONLY the PostgreSQL 'CREATE TABLE IF NOT EXISTS' statements required. 
@@ -112,7 +128,7 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
         1. NEVER name any table exactly 'users', 'payments', 'system_settings', 'device_logs', 'generated_apps', or 'app_versions'. These are reserved!
         2. You MUST prefix ALL tables for this app with '{safe_prefix}_' (e.g., '{safe_prefix}_videos', '{safe_prefix}_comments').
         3. Ensure every table has an 'id' (UUID PRIMARY KEY DEFAULT gen_random_uuid()) and a 'created_at' column.
-        4. CRITICAL: If the user explicitly requests "No login", "No register", or "ඕනි නෑ" (Don't need), DO NOT create user or auth related tables.
+        4. If the user explicitly requested NO LOGIN, DO NOT create any user or auth tables.
         
         If NO: Output EXACTLY the word: NO_DB
         
@@ -159,17 +175,16 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
         
         CRITICAL RULES (VIOLATING THESE WILL CAUSE FATAL ERRORS):
         1. PURE PYTHON CODE ONLY. NO markdown. Start immediately with import streamlit as st.
-        2. STRICT OBEDIENCE: If the user says "No login", "No register", or "ඕනි නෑ" (Sinhala for don't need), YOU MUST NOT generate any login or registration forms. Build the main app content immediately.
-        3. NO SUPABASE INITIALIZATION (CRITICAL): NEVER define `supabase_url`, `supabase_key` or use `create_client()`. The `supabase` object is ALREADY INJECTED globally into the environment. Just use it directly (e.g., `res = supabase.table('tbl').select('*').execute()`).
-        4. SUPABASE V2 SYNTAX (CRITICAL): You MUST append `.execute()` to EVERY Supabase query. To read data, you MUST use `.data`.
+        2. NO SUPABASE INITIALIZATION (CRITICAL): NEVER define `supabase_url`, `supabase_key` or use `create_client()`. The `supabase` object is ALREADY INJECTED globally into the environment. Just use it directly (e.g., `res = supabase.table('tbl').select('*').execute()`).
+        3. SUPABASE V2 SYNTAX (CRITICAL): You MUST append `.execute()` to EVERY Supabase query. To read data, you MUST use `.data`.
             - RIGHT (Read): `res = supabase.table('tbl').select('*').execute(); data = res.data`
             - WRONG (Read): `data = supabase.table('tbl').select('*')` 
-        5. DATABASE MATCHING: If a DATABASE EXISTS schema is provided below, you MUST use EXACTLY those specific table names (e.g., '{safe_prefix}_xyz'). DO NOT invent generic table names unless they are defined below.
-        6. UNIQUE KEYS: EVERY st.input/button MUST have a unique `key=`.
-        7. TABS RULE: NEVER use `key=` in `st.tabs`. ALWAYS use `tab1, tab2 = st.tabs(["A", "B"])` and `with tab1:`.
-        8. ZERO PLACEHOLDERS: You MUST generate the ENTIRE, 100% COMPLETE, FUNCTIONAL application code. Do not write "add logic here".
-        9. EXCEPTION HANDLING: Catch all errors using a generic `except Exception as e:`. NEVER import or use `supabase.exceptions`.
-        10. PREMIUM UI/UX: The user demands high quality. Use `with st.container(border=True):`, `st.columns()`, clear headers, and modern layouts.
+        4. DATABASE MATCHING: If a DATABASE EXISTS schema is provided below, you MUST use EXACTLY those specific table names (e.g., '{safe_prefix}_xyz'). DO NOT invent generic table names unless they are defined below.
+        5. UNIQUE KEYS: EVERY st.input/button MUST have a unique `key=`.
+        6. TABS RULE: NEVER use `key=` in `st.tabs`. ALWAYS use `tab1, tab2 = st.tabs(["A", "B"])` and `with tab1:`.
+        7. ZERO PLACEHOLDERS: You MUST generate the ENTIRE, 100% COMPLETE, FUNCTIONAL application code. Do not write "add logic here".
+        8. EXCEPTION HANDLING: Catch all errors using a generic `except Exception as e:`. NEVER import or use `supabase.exceptions`.
+        9. PREMIUM UI/UX: The user demands high quality. Use `with st.container(border=True):`, `st.columns()`, clear headers, and modern layouts.
         """
         
         if db_schema_sql and "NO_DB" not in db_schema_sql.upper(): 
@@ -185,6 +200,9 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
             full_prompt += "\nPlease rewrite the entire code flawlessly while obeying ALL CRITICAL RULES. DO NOT OMIT ANY PREVIOUS FEATURES."
         else: 
             full_prompt += "\nWrite the complete initial code obeying ALL CRITICAL RULES. MAKE SURE IT IS 100% READY TO RUN."
+
+        # 🚨 Recency Bias Injection: Placing the strict auth instruction at the very end.
+        full_prompt += f"\n\n{auth_instruction}"
             
         generated_code = ""
         if app_data.get('selected_model') == 'gemini':
