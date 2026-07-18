@@ -44,7 +44,6 @@ def clean_python_code(code_str):
         line_str = line.strip()
         if line_str.startswith('st.set_page_config'): continue
         if line_str.startswith('st.footer'): continue
-        # යාවත්කාලීන කළ කොටස - Supabase Exceptions දෝෂය මඟහැරීම සඳහා
         if 'import supabase' in line_str or 'from supabase' in line_str: continue
         if 'create_client(' in line_str: continue
         final_lines.append(line)
@@ -166,8 +165,14 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
         7. TABS RULE: NEVER use key= in st.tabs. NEVER check st.session_state for tabs. ALWAYS use tab1, tab2 = st.tabs(["A", "B"]) and with tab1:.
         8. CRITICAL DATABASE RULE: NEVER query or insert into a table simply named 'users'. Always use the specific table names (like '{safe_prefix}_users') defined in the database schema.
         9. ZERO PLACEHOLDERS: You MUST generate the ENTIRE, 100% COMPLETE, FUNCTIONAL application code. Do not write "add logic here" or leave parts unfinished.
-        10. EXCEPTION HANDLING (CRITICAL): NEVER import or use `supabase.exceptions`. NEVER write `except supabase.exceptions...`. You MUST catch all errors using a generic `except Exception as e:`.
-        11. PERFECT UNDERSTANDING: If the user gave instructions in Sinhala, translate the intent perfectly. If they gave a wild idea, implement it fully.
+        10. EXCEPTION HANDLING: NEVER import or use `supabase.exceptions`. Catch all errors using a generic `except Exception as e:`.
+        11. SUPABASE V2 SYNTAX (EXTREMELY CRITICAL): You MUST append `.execute()` to EVERY Supabase query. To read data, you MUST use `.data`.
+            - RIGHT (Read): `res = supabase.table('tbl').select('*').execute(); data = res.data`
+            - WRONG (Read): `data = supabase.table('tbl').select('*')` (This returns SyncSelectRequestBuilder which causes iteration errors!)
+            - RIGHT (Insert): `supabase.table('tbl').insert(row).execute()`
+            - WRONG (Insert): `supabase.table('tbl').insert(row)`
+        12. PREMIUM UI/UX: The user demands high quality. Do NOT just use basic inputs. Use `with st.container(border=True):`, `st.columns()`, clear headers, dividers, and modern layouts to make the app look stunning.
+        13. PERFECT UNDERSTANDING: If the user gave instructions in Sinhala, translate the intent perfectly. If they gave a wild idea, implement it fully.
         """
         
         if db_schema_sql and "NO_DB" not in db_schema_sql.upper(): 
