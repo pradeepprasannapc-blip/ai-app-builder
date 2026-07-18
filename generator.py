@@ -44,14 +44,13 @@ def clean_python_code(code_str):
         line_str = line.strip()
         if line_str.startswith('st.set_page_config'): continue
         if line_str.startswith('st.footer'): continue
-        if 'from supabase import' in line_str: continue
-        if 'import supabase' in line_str: continue
+        # යාවත්කාලීන කළ කොටස - Supabase Exceptions දෝෂය මඟහැරීම සඳහා
+        if 'import supabase' in line_str or 'from supabase' in line_str: continue
         if 'create_client(' in line_str: continue
         final_lines.append(line)
     return '\n'.join(final_lines).strip()
 
 def fetch_github_context(url, github_token):
-    """GitHub ලින්ක් එකක් හඳුනාගෙන එහි ඇති කේතයන් AI එකට ලබා දෙයි."""
     if not github_token: 
         return ""
     match = re.search(r"github\.com/([^/]+)/([^/]+)", url)
@@ -145,7 +144,6 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
             except Exception as dbe: 
                 pass
                 
-        # GitHub Context ලබා ගැනීම
         github_token = st.secrets.get("GITHUB_TOKEN", "")
         extra_context = ""
         if app_data.get('source_link') and "github.com" in app_data['source_link']:
@@ -168,7 +166,8 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
         7. TABS RULE: NEVER use key= in st.tabs. NEVER check st.session_state for tabs. ALWAYS use tab1, tab2 = st.tabs(["A", "B"]) and with tab1:.
         8. CRITICAL DATABASE RULE: NEVER query or insert into a table simply named 'users'. Always use the specific table names (like '{safe_prefix}_users') defined in the database schema.
         9. ZERO PLACEHOLDERS: You MUST generate the ENTIRE, 100% COMPLETE, FUNCTIONAL application code. Do not write "add logic here" or leave parts unfinished.
-        10. PERFECT UNDERSTANDING: If the user gave instructions in Sinhala, translate the intent perfectly. If they gave a wild, out-of-the-box idea, implement it fully with a beautiful modern UI.
+        10. EXCEPTION HANDLING (CRITICAL): NEVER import or use `supabase.exceptions`. NEVER write `except supabase.exceptions...`. You MUST catch all errors using a generic `except Exception as e:`.
+        11. PERFECT UNDERSTANDING: If the user gave instructions in Sinhala, translate the intent perfectly. If they gave a wild idea, implement it fully.
         """
         
         if db_schema_sql and "NO_DB" not in db_schema_sql.upper(): 
