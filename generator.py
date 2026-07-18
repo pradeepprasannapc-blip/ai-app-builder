@@ -45,9 +45,9 @@ def clean_python_code(code_str):
         if line_str.startswith('st.set_page_config'): continue
         if line_str.startswith('st.footer'): continue
         if 'import supabase' in line_str or 'from supabase' in line_str: continue
-        if 'create_client(' in line_str: continue
-        # Force remove dummy credentials if AI disobeys
-        if 'supabase_url =' in line_str or 'supabase_key =' in line_str: continue 
+        if 'create_client(' in line_str or 'supabase.create_client' in line_str: continue
+        # 🚨 Force remove dummy credentials if AI disobeys
+        if 'supabase_url' in line_str.lower() or 'supabase_key' in line_str.lower() or 'supabase_secret' in line_str.lower(): continue 
         final_lines.append(line)
     return '\n'.join(final_lines).strip()
 
@@ -112,7 +112,7 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
         1. NEVER name any table exactly 'users', 'payments', 'system_settings', 'device_logs', 'generated_apps', or 'app_versions'. These are reserved!
         2. You MUST prefix ALL tables for this app with '{safe_prefix}_' (e.g., '{safe_prefix}_videos', '{safe_prefix}_comments').
         3. Ensure every table has an 'id' (UUID PRIMARY KEY DEFAULT gen_random_uuid()) and a 'created_at' column.
-        4. If the user explicitly requests NO LOGIN or NO REGISTER, DO NOT create user or auth related tables.
+        4. CRITICAL: If the user explicitly requests "No login", "No register", or "ඕනි නෑ" (Don't need), DO NOT create user or auth related tables.
         
         If NO: Output EXACTLY the word: NO_DB
         
@@ -159,12 +159,12 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
         
         CRITICAL RULES (VIOLATING THESE WILL CAUSE FATAL ERRORS):
         1. PURE PYTHON CODE ONLY. NO markdown. Start immediately with import streamlit as st.
-        2. STRICT OBEDIENCE: If the user says "No login", "No register", or asks to exclude a feature, YOU MUST OBEY. DO NOT build auth systems if explicitly told not to.
-        3. NO SUPABASE INITIALIZATION (CRITICAL): You MUST NOT import supabase. You MUST NOT use `create_client()`. The `supabase` object is ALREADY INJECTED into the global environment. Just use it directly (e.g., `res = supabase.table('tbl').select('*').execute()`).
+        2. STRICT OBEDIENCE: If the user says "No login", "No register", or "ඕනි නෑ" (Sinhala for don't need), YOU MUST NOT generate any login or registration forms. Build the main app content immediately.
+        3. NO SUPABASE INITIALIZATION (CRITICAL): NEVER define `supabase_url`, `supabase_key` or use `create_client()`. The `supabase` object is ALREADY INJECTED globally into the environment. Just use it directly (e.g., `res = supabase.table('tbl').select('*').execute()`).
         4. SUPABASE V2 SYNTAX (CRITICAL): You MUST append `.execute()` to EVERY Supabase query. To read data, you MUST use `.data`.
             - RIGHT (Read): `res = supabase.table('tbl').select('*').execute(); data = res.data`
             - WRONG (Read): `data = supabase.table('tbl').select('*')` 
-        5. DATABASE MATCHING: If a DATABASE EXISTS schema is provided below, you MUST use EXACTLY those specific table names (e.g., '{safe_prefix}_xyz'). DO NOT invent generic table names like 'yt_videos' unless explicitly created in the schema below.
+        5. DATABASE MATCHING: If a DATABASE EXISTS schema is provided below, you MUST use EXACTLY those specific table names (e.g., '{safe_prefix}_xyz'). DO NOT invent generic table names unless they are defined below.
         6. UNIQUE KEYS: EVERY st.input/button MUST have a unique `key=`.
         7. TABS RULE: NEVER use `key=` in `st.tabs`. ALWAYS use `tab1, tab2 = st.tabs(["A", "B"])` and `with tab1:`.
         8. ZERO PLACEHOLDERS: You MUST generate the ENTIRE, 100% COMPLETE, FUNCTIONAL application code. Do not write "add logic here".
