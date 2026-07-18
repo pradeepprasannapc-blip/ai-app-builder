@@ -293,7 +293,9 @@ def render_app_card(app, is_admin=False):
                             st.rerun()
                             
                 with tab_preview:
-                    if st.button("▶️ Run Preview", key=f"{prefix}runprev", type="primary"):
+                    # බොත්තම වෙනුවට Toggle ස්විචයක් භාවිතා කිරීම
+                    preview_active = st.toggle("👁️ Turn On Live Preview", key=f"{prefix}runprev")
+                    if preview_active:
                         try:
                             safe_code = clean_python_code(current_code)
                             st.markdown("### 📱 Live App Demo")
@@ -309,7 +311,7 @@ def render_app_card(app, is_admin=False):
                                     exec(safe_code, exec_globals)
                                 except Exception as inner_e:
                                     if 'PGRST205' in str(inner_e) or 'Could not find the table' in str(inner_e):
-                                        st.warning("⏳ AI එක අලුත් දත්ත ගබඩාවක් (Database Table) නිර්මාණය කරමින් පවතී. කරුණාකර තත්පර 15කින් පමණ නැවත 'Run Preview' ඔබන්න.")
+                                        st.warning("⏳ AI එක අලුත් දත්ත ගබඩාවක් (Database Table) නිර්මාණය කරමින් පවතී. කරුණාකර තත්පර 15කින් පමණ නැවත බලන්න.")
                                     else:
                                         st.error(f"Preview Error: {inner_e}")
                         except Exception as e: 
