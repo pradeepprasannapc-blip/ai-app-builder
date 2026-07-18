@@ -46,6 +46,8 @@ def clean_python_code(code_str):
         if line_str.startswith('st.footer'): continue
         if 'import supabase' in line_str or 'from supabase' in line_str: continue
         if 'create_client(' in line_str: continue
+        # Force remove dummy credentials if AI disobeys
+        if 'supabase_url =' in line_str or 'supabase_key =' in line_str: continue 
         final_lines.append(line)
     return '\n'.join(final_lines).strip()
 
@@ -108,9 +110,9 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
         
         CRITICAL RULES FOR DB SCHEMA:
         1. NEVER name any table exactly 'users', 'payments', 'system_settings', 'device_logs', 'generated_apps', or 'app_versions'. These are reserved!
-        2. If the app needs a user registration table, you MUST name it '{safe_prefix}_users'.
-        3. Prefix all other tables for this app similarly (e.g., '{safe_prefix}_videos', '{safe_prefix}_posts').
-        4. Ensure every table has an 'id' (UUID PRIMARY KEY DEFAULT gen_random_uuid()) and a 'created_at' column.
+        2. You MUST prefix ALL tables for this app with '{safe_prefix}_' (e.g., '{safe_prefix}_videos', '{safe_prefix}_comments').
+        3. Ensure every table has an 'id' (UUID PRIMARY KEY DEFAULT gen_random_uuid()) and a 'created_at' column.
+        4. If the user explicitly requests NO LOGIN or NO REGISTER, DO NOT create user or auth related tables.
         
         If NO: Output EXACTLY the word: NO_DB
         
@@ -155,28 +157,23 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
         
         {extra_context}
         
-        CRITICAL RULES:
-        1. PURE PYTHON CODE ONLY. NO markdown.
-        2. Start immediately with import streamlit as st. DO NOT leave empty spaces at the beginning of the file.
-        3. 4 spaces indentation everywhere. DO NOT use inconsistent indentation.
-        4. NO sqlite3. Use supabase ONLY.
-        5. UNIQUE KEYS: EVERY input/button MUST have a unique key=. (EXCEPTION: st.form name is its key).
-        6. NO nested forms in buttons.
-        7. TABS RULE: NEVER use key= in st.tabs. NEVER check st.session_state for tabs. ALWAYS use tab1, tab2 = st.tabs(["A", "B"]) and with tab1:.
-        8. CRITICAL DATABASE RULE: NEVER query or insert into a table simply named 'users'. Always use the specific table names (like '{safe_prefix}_users') defined in the database schema.
-        9. ZERO PLACEHOLDERS: You MUST generate the ENTIRE, 100% COMPLETE, FUNCTIONAL application code. Do not write "add logic here" or leave parts unfinished.
-        10. EXCEPTION HANDLING: NEVER import or use `supabase.exceptions`. Catch all errors using a generic `except Exception as e:`.
-        11. SUPABASE V2 SYNTAX (EXTREMELY CRITICAL): You MUST append `.execute()` to EVERY Supabase query. To read data, you MUST use `.data`.
+        CRITICAL RULES (VIOLATING THESE WILL CAUSE FATAL ERRORS):
+        1. PURE PYTHON CODE ONLY. NO markdown. Start immediately with import streamlit as st.
+        2. STRICT OBEDIENCE: If the user says "No login", "No register", or asks to exclude a feature, YOU MUST OBEY. DO NOT build auth systems if explicitly told not to.
+        3. NO SUPABASE INITIALIZATION (CRITICAL): You MUST NOT import supabase. You MUST NOT use `create_client()`. The `supabase` object is ALREADY INJECTED into the global environment. Just use it directly (e.g., `res = supabase.table('tbl').select('*').execute()`).
+        4. SUPABASE V2 SYNTAX (CRITICAL): You MUST append `.execute()` to EVERY Supabase query. To read data, you MUST use `.data`.
             - RIGHT (Read): `res = supabase.table('tbl').select('*').execute(); data = res.data`
-            - WRONG (Read): `data = supabase.table('tbl').select('*')` (This returns SyncSelectRequestBuilder which causes iteration errors!)
-            - RIGHT (Insert): `supabase.table('tbl').insert(row).execute()`
-            - WRONG (Insert): `supabase.table('tbl').insert(row)`
-        12. PREMIUM UI/UX: The user demands high quality. Do NOT just use basic inputs. Use `with st.container(border=True):`, `st.columns()`, clear headers, dividers, and modern layouts to make the app look stunning.
-        13. PERFECT UNDERSTANDING: If the user gave instructions in Sinhala, translate the intent perfectly. If they gave a wild idea, implement it fully.
+            - WRONG (Read): `data = supabase.table('tbl').select('*')` 
+        5. DATABASE MATCHING: If a DATABASE EXISTS schema is provided below, you MUST use EXACTLY those specific table names (e.g., '{safe_prefix}_xyz'). DO NOT invent generic table names like 'yt_videos' unless explicitly created in the schema below.
+        6. UNIQUE KEYS: EVERY st.input/button MUST have a unique `key=`.
+        7. TABS RULE: NEVER use `key=` in `st.tabs`. ALWAYS use `tab1, tab2 = st.tabs(["A", "B"])` and `with tab1:`.
+        8. ZERO PLACEHOLDERS: You MUST generate the ENTIRE, 100% COMPLETE, FUNCTIONAL application code. Do not write "add logic here".
+        9. EXCEPTION HANDLING: Catch all errors using a generic `except Exception as e:`. NEVER import or use `supabase.exceptions`.
+        10. PREMIUM UI/UX: The user demands high quality. Use `with st.container(border=True):`, `st.columns()`, clear headers, and modern layouts.
         """
         
         if db_schema_sql and "NO_DB" not in db_schema_sql.upper(): 
-            full_prompt += f"\n\nDATABASE EXISTS. You MUST use this schema: \n{db_schema_sql}\n"
+            full_prompt += f"\n\nDATABASE EXISTS. You MUST use EXACTLY these tables: \n{db_schema_sql}\n"
             
         if app_data.get('app_code'): 
             full_prompt += f"\n\n--- CURRENT CODE ---\n{app_data['app_code']}\n"
@@ -293,7 +290,6 @@ def render_app_card(app, is_admin=False):
                             st.rerun()
                             
                 with tab_preview:
-                    # බොත්තම වෙනුවට Toggle ස්විචයක් භාවිතා කිරීම
                     preview_active = st.toggle("👁️ Turn On Live Preview", key=f"{prefix}runprev")
                     if preview_active:
                         try:
