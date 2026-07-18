@@ -47,7 +47,10 @@ def clean_python_code(code_str):
         if 'import supabase' in line_str or 'from supabase' in line_str: continue
         if 'create_client(' in line_str or 'supabase.create_client' in line_str: continue
         # 🚨 Force remove dummy credentials if AI disobeys
-        if 'supabase_url' in line_str.lower() or 'supabase_key' in line_str.lower() or 'supabase_secret' in line_str.lower(): continue 
+        lower_line = line_str.lower()
+        if 'supabase_url' in lower_line and '=' in lower_line: continue 
+        if 'supabase_key' in lower_line and '=' in lower_line: continue 
+        if 'supabase_secret' in lower_line and '=' in lower_line: continue 
         final_lines.append(line)
     return '\n'.join(final_lines).strip()
 
@@ -109,10 +112,10 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
             🚨🚨🚨 [ABSOLUTE CRITICAL DIRECTIVE - NO AUTHENTICATION] 🚨🚨🚨
             The user has STRICTLY FORBIDDEN Login and Registration functionalities. 
             YOU MUST NOT generate any forms for login or registration. 
-            YOU MUST NOT write functions like 'def login_user' or 'def register_user'.
-            YOU MUST NOT use `st.text_input(..., type='password')`.
+            YOU MUST NOT write functions like 'login_user' or 'register_user'.
+            YOU MUST NOT use `st.session_state.logged_in`.
             IGNORE your standard SaaS/App templates.
-            START THE MAIN APP CONTENT (like viewing videos, playing, etc.) DIRECTLY on the home page!
+            START THE MAIN APP CONTENT (like viewing videos, playing, uploading) DIRECTLY on the home page!
             """
 
         db_prompt = f"""
@@ -125,10 +128,13 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
         If YES: Write ONLY the PostgreSQL 'CREATE TABLE IF NOT EXISTS' statements required. 
         
         CRITICAL RULES FOR DB SCHEMA:
-        1. NEVER name any table exactly 'users', 'payments', 'system_settings', 'device_logs', 'generated_apps', or 'app_versions'. These are reserved!
-        2. You MUST prefix ALL tables for this app with '{safe_prefix}_' (e.g., '{safe_prefix}_videos', '{safe_prefix}_comments').
+        1. NEVER name any table exactly 'users', 'payments', 'system_settings', 'device_logs', 'generated_apps', or 'app_versions'.
+        2. You MUST prefix ALL tables for this app with '{safe_prefix}_' (e.g., '{safe_prefix}_videos').
         3. Ensure every table has an 'id' (UUID PRIMARY KEY DEFAULT gen_random_uuid()) and a 'created_at' column.
         4. If the user explicitly requested NO LOGIN, DO NOT create any user or auth tables.
+        5. SECURITY BYPASS (CRITICAL): You MUST append these two lines for EVERY table you create, otherwise the app will crash with PGRST205:
+           ALTER TABLE {safe_prefix}_<table_name> DISABLE ROW LEVEL SECURITY;
+           GRANT ALL ON TABLE {safe_prefix}_<table_name> TO anon, authenticated, service_role;
         
         If NO: Output EXACTLY the word: NO_DB
         
@@ -154,11 +160,13 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
                     user=parsed.username, password=db_pass, host=parsed.hostname, 
                     port=parsed.port or 5432, database=parsed.path.lstrip('/')
                 )
-                conn.run(db_schema_sql)
+                clean_sql = db_schema_sql.replace("```sql", "").replace("```", "").strip()
+                conn.run(clean_sql)
                 conn.run("NOTIFY pgrst, 'reload schema'")
                 conn.close()
-                time.sleep(2) 
+                time.sleep(3) # Give Supabase Cache 3 seconds to reload
             except Exception as dbe: 
+                print("DB Schema Execution Error:", dbe)
                 pass
                 
         github_token = st.secrets.get("GITHUB_TOKEN", "")
