@@ -10,6 +10,7 @@ import io
 import zipfile
 import requests
 import textwrap
+import base64
 from datetime import datetime, timezone
 import groq
 from google import genai
@@ -49,6 +50,40 @@ def clean_python_code(code_str):
         final_lines.append(line)
     return '\n'.join(final_lines).strip()
 
+def fetch_github_context(url, github_token):
+    """GitHub ලින්ක් එකක් හඳුනාගෙන එහි ඇති කේතයන් AI එකට ලබා දෙයි."""
+    if not github_token: 
+        return ""
+    match = re.search(r"github\.com/([^/]+)/([^/]+)", url)
+    if not match: 
+        return ""
+    
+    owner, repo = match.group(1), match.group(2).replace(".git", "")
+    headers = {"Authorization": f"token {github_token}", "Accept": "application/vnd.github.v3+json"}
+    context = f"\n\n--- GITHUB REPOSITORY CONTEXT ({owner}/{repo}) ---\n"
+    
+    try:
+        api_url = f"https://api.github.com/repos/{owner}/{repo}/git/trees/main?recursive=1"
+        resp = requests.get(api_url, headers=headers, timeout=10)
+        if resp.status_code == 200:
+            tree = resp.json().get("tree", [])
+            allowed_extensions = ('.py', '.js', '.html', '.css', '.md', '.txt')
+            relevant_files = [f for f in tree if f["type"] == "blob" and f["path"].endswith(allowed_extensions)]
+            
+            for file_info in relevant_files[:5]:
+                file_url = f"https://api.github.com/repos/{owner}/{repo}/contents/{file_info['path']}"
+                f_resp = requests.get(file_url, headers=headers, timeout=10)
+                if f_resp.status_code == 200:
+                    content_data = f_resp.json()
+                    if "content" in content_data:
+                        decoded_content = base64.b64decode(content_data["content"]).decode('utf-8', errors='ignore')
+                        context += f"\nFile: {file_info['path']}\nCode:\n{decoded_content[:1500]}\n"
+            context += "--- END OF GITHUB CONTEXT ---\n"
+            return context
+    except Exception as e:
+        print(f"GitHub Fetch Error: {e}")
+    return ""
+
 def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_key):
     db = create_client(supa_url, supa_service_key)
     app_id = app_data['id']
@@ -63,7 +98,6 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
                 if msg['role'] == 'user': 
                     last_user_prompt = msg['content']
                     
-        # 🚨 FIX: Force AI to create Unique Table names based on App Name
         safe_prefix = re.sub(r'[^a-zA-Z0-9]', '', str(app_data.get('app_name', 'app'))).lower()
         if not safe_prefix: safe_prefix = "custom_app"
                     
@@ -111,10 +145,18 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
             except Exception as dbe: 
                 pass
                 
+        # GitHub Context ලබා ගැනීම
+        github_token = st.secrets.get("GITHUB_TOKEN", "")
+        extra_context = ""
+        if app_data.get('source_link') and "github.com" in app_data['source_link']:
+            extra_context = fetch_github_context(app_data['source_link'], github_token)
+
         full_prompt = f"""
-        You are an elite Python Streamlit developer.
+        You are an elite, world-class Python Streamlit developer and AI App Builder. Your ultimate task is to build a flawless, fully functional application.
         App Name: {app_data['app_name']}
-        App Idea / Reference: {app_data['source_link']}
+        User Request / Link: {app_data['source_link']}
+        
+        {extra_context}
         
         CRITICAL RULES:
         1. PURE PYTHON CODE ONLY. NO markdown.
@@ -125,6 +167,8 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
         6. NO nested forms in buttons.
         7. TABS RULE: NEVER use key= in st.tabs. NEVER check st.session_state for tabs. ALWAYS use tab1, tab2 = st.tabs(["A", "B"]) and with tab1:.
         8. CRITICAL DATABASE RULE: NEVER query or insert into a table simply named 'users'. Always use the specific table names (like '{safe_prefix}_users') defined in the database schema.
+        9. ZERO PLACEHOLDERS: You MUST generate the ENTIRE, 100% COMPLETE, FUNCTIONAL application code. Do not write "add logic here" or leave parts unfinished.
+        10. PERFECT UNDERSTANDING: If the user gave instructions in Sinhala, translate the intent perfectly. If they gave a wild, out-of-the-box idea, implement it fully with a beautiful modern UI.
         """
         
         if db_schema_sql and "NO_DB" not in db_schema_sql.upper(): 
@@ -137,9 +181,9 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
             for msg in chat_hist:
                 if msg['role'] == 'user': 
                     full_prompt += f"User: {msg['content']}\n"
-            full_prompt += "\nPlease rewrite the entire code flawlessly while obeying ALL CRITICAL RULES."
+            full_prompt += "\nPlease rewrite the entire code flawlessly while obeying ALL CRITICAL RULES. DO NOT OMIT ANY PREVIOUS FEATURES."
         else: 
-            full_prompt += "\nWrite the complete initial code obeying ALL CRITICAL RULES."
+            full_prompt += "\nWrite the complete initial code obeying ALL CRITICAL RULES. MAKE SURE IT IS 100% READY TO RUN."
             
         generated_code = ""
         if app_data.get('selected_model') == 'gemini':
@@ -527,14 +571,14 @@ def render_upgrade_section():
         <div style="flex: 1; background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); padding: 25px; border-radius: 15px; color: white; box-shadow: 0 10px 20px rgba(0,0,0,0.2);">
             <h3 style="margin-top:0; color: #4dc9ff; font-family: sans-serif;">📱 iPay / Online Transfer</h3>
             <p style="font-size: 18px; margin: 8px 0; opacity: 0.9;">Account Number</p>
-            <h2 style="margin: 0; font-size: 28px; letter-spacing: 2px;">{payment.get('ipay_num', '')}</h2>
-            <p style="font-size: 16px; margin: 15px 0 0 0; color: #b3d4ff;">Name: <strong style="color: white;">{payment.get('ipay_name', '').upper()}</strong></p>
+            <h2 style="margin: 0; font-size: 28px; letter-spacing: 2px;">{{payment.get('ipay_num', '')}}</h2>
+            <p style="font-size: 16px; margin: 15px 0 0 0; color: #b3d4ff;">Name: <strong style="color: white;">{{payment.get('ipay_name', '').upper()}}</strong></p>
         </div>
         <div style="flex: 1; background: linear-gradient(135deg, #d4af37 0%, #aa7700 100%); padding: 25px; border-radius: 15px; color: white; box-shadow: 0 10px 20px rgba(0,0,0,0.2);">
             <h3 style="margin-top:0; color: #fffef0; font-family: sans-serif;">🏦 BOC Flex / CDM Machine</h3>
             <p style="font-size: 18px; margin: 8px 0; opacity: 0.9;">Account Number</p>
-            <h2 style="margin: 0; font-size: 28px; letter-spacing: 2px;">{payment.get('boc_num', '')}</h2>
-            <p style="font-size: 16px; margin: 15px 0 0 0; color: #ffefb3;">Name: <strong style="color: white;">{payment.get('boc_name', '').upper()}</strong></p>
+            <h2 style="margin: 0; font-size: 28px; letter-spacing: 2px;">{{payment.get('boc_num', '')}}</h2>
+            <p style="font-size: 16px; margin: 15px 0 0 0; color: #ffefb3;">Name: <strong style="color: white;">{{payment.get('boc_name', '').upper()}}</strong></p>
         </div>
     </div>
     """, unsafe_allow_html=True)
