@@ -63,13 +63,23 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
                 if msg['role'] == 'user': 
                     last_user_prompt = msg['content']
                     
+        # 🚨 FIX: Force AI to create Unique Table names based on App Name
+        safe_prefix = re.sub(r'[^a-zA-Z0-9]', '', str(app_data.get('app_name', 'app'))).lower()
+        if not safe_prefix: safe_prefix = "custom_app"
+                    
         db_prompt = f"""
         You are an expert PostgreSQL Database Architect.
         The user wants an app based on this request: "{last_user_prompt}"
         
         Does this app need a database to store dynamic data (e.g., users, products, posts, tasks)?
         If YES: Write ONLY the PostgreSQL 'CREATE TABLE IF NOT EXISTS' statements required. 
-        IMPORTANT: Ensure every table has an 'id' (UUID PRIMARY KEY DEFAULT gen_random_uuid()) and a 'created_at' column.
+        
+        CRITICAL RULES FOR DB SCHEMA:
+        1. NEVER name any table exactly 'users', 'payments', 'system_settings', 'device_logs', 'generated_apps', or 'app_versions'. These are reserved!
+        2. If the app needs a user registration table, you MUST name it '{safe_prefix}_users'.
+        3. Prefix all other tables for this app similarly (e.g., '{safe_prefix}_videos', '{safe_prefix}_posts').
+        4. Ensure every table has an 'id' (UUID PRIMARY KEY DEFAULT gen_random_uuid()) and a 'created_at' column.
+        
         If NO: Output EXACTLY the word: NO_DB
         
         Output ONLY raw SQL or NO_DB. No explanations, no markdown.
@@ -114,6 +124,7 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
         5. UNIQUE KEYS: EVERY input/button MUST have a unique key=. (EXCEPTION: st.form name is its key).
         6. NO nested forms in buttons.
         7. TABS RULE: NEVER use key= in st.tabs. NEVER check st.session_state for tabs. ALWAYS use tab1, tab2 = st.tabs(["A", "B"]) and with tab1:.
+        8. CRITICAL DATABASE RULE: NEVER query or insert into a table simply named 'users'. Always use the specific table names (like '{safe_prefix}_users') defined in the database schema.
         """
         
         if db_schema_sql and "NO_DB" not in db_schema_sql.upper(): 
@@ -244,11 +255,9 @@ def render_app_card(app, is_admin=False):
                                     del exec_globals['supabase']
                                 exec_globals['supabase'] = get_db(is_admin)
                                 
-                                # 🚨 FIX: Force Python to recognize this as the main file to trigger __name__ == "__main__"
                                 exec_globals['__name__'] = '__main__'
                                 
                                 try:
-                                    # 🚨 FIX: Safe execution mapping both globals and locals
                                     exec(safe_code, exec_globals)
                                 except Exception as inner_e:
                                     if 'PGRST205' in str(inner_e) or 'Could not find the table' in str(inner_e):
