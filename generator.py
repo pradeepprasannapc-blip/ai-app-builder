@@ -47,11 +47,12 @@ def clean_python_code(code_str):
         if line_str.startswith('st.footer'): continue
         if 'import supabase' in lower_line or 'from supabase' in lower_line: continue
         if 'create_client' in lower_line: continue
-        # 🚨 AI එක බලෙන් දාන බොරු Credentials සම්පූර්ණයෙන්ම අයින් කිරීම
+        # 🚨 AI එක බලෙන් දාන බොරු Credentials සහ අනවශ්‍ය Libraries අයින් කිරීම
         if 'supabase_url' in lower_line and '=' in lower_line: continue 
         if 'supabase_key' in lower_line and '=' in lower_line: continue 
         if 'supabase_secret' in lower_line and '=' in lower_line: continue 
         if 'client =' in lower_line and 'supabase' in lower_line: continue
+        if 'import bs4' in lower_line or 'from bs4' in lower_line or 'beautifulsoup' in lower_line: continue # BS4 Error Fix
         final_lines.append(line)
     return '\n'.join(final_lines).strip()
 
@@ -105,7 +106,6 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
         safe_prefix = re.sub(r'[^a-zA-Z0-9]', '', str(app_data.get('app_name', 'app'))).lower()
         if not safe_prefix: safe_prefix = "custom_app"
         
-        # 🪄 SUPER MAGIC: Ultimate Constraint Handling
         auth_instruction = ""
         user_prompt_lower = last_user_prompt.lower()
         if any(word in user_prompt_lower for word in ["ඕනි නෑ", "ඕනෙ නෑ", "එපා", "නොමැතිව", "no login", "no auth", "without login"]):
@@ -117,7 +117,6 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
             - DO NOT create user management functions.
             - DO NOT use `st.session_state.logged_in`.
             - START THE MAIN APP FEATURES IMMEDIATELY ON THE HOME SCREEN.
-            - IF YOU GENERATE LOGIN CODE, THE SYSTEM WILL CRASH.
             """
 
         db_prompt = f"""
@@ -162,14 +161,13 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
                     port=parsed.port or 5432, database=parsed.path.lstrip('/')
                 )
                 clean_sql = db_schema_sql.replace("```sql", "").replace("```", "").strip()
-                # 🚨 SQL Execution Fix: Split and execute line by line to prevent crashes
                 sql_statements = [s.strip() for s in clean_sql.split(';') if s.strip()]
                 for stmt in sql_statements:
                     conn.run(stmt)
                 
                 conn.run("NOTIFY pgrst, 'reload schema'")
                 conn.close()
-                time.sleep(3) # Give Supabase time to reload cache
+                time.sleep(3) 
             except Exception as dbe: 
                 print("DB Schema Execution Error:", dbe)
                 pass
@@ -190,9 +188,7 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
         1. PURE PYTHON CODE ONLY. NO markdown. Start immediately with import streamlit as st.
         2. NO SUPABASE INITIALIZATION (CRITICAL): NEVER define `supabase_url`, `supabase_key` or use `create_client()`. The `supabase` object is ALREADY INJECTED globally. Use it directly (e.g., `res = supabase.table('tbl').select('*').execute()`).
         3. SUPABASE V2 SYNTAX (CRITICAL): You MUST append `.execute()` to EVERY Supabase query. To read data, you MUST use `.data`.
-            - RIGHT: `res = supabase.table('tbl').select('*').execute(); data = res.data`
-            - WRONG: `data = supabase.table('tbl').select('*')` 
-        4. DATABASE MATCHING: If a DATABASE EXISTS schema is provided below, you MUST use EXACTLY those specific table names (e.g., '{safe_prefix}_xyz'). DO NOT invent generic table names.
+        4. STRICT IMPORTS RULE (CRITICAL): You may ONLY import standard Python libraries and 'streamlit', 'requests', 'pandas', 'plotly'. YOU ARE STRICTLY FORBIDDEN from importing 'bs4', 'beautifulsoup4', 'numpy', or any other unapproved external library.
         5. UNIQUE KEYS: EVERY st.input/button MUST have a unique `key=`.
         6. TABS RULE: NEVER use `key=` in `st.tabs`. ALWAYS use `tab1, tab2 = st.tabs(["A", "B"])` and `with tab1:`.
         7. ZERO PLACEHOLDERS: Generate the ENTIRE, 100% COMPLETE application.
@@ -214,7 +210,6 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
         else: 
             full_prompt += "\nWrite the complete initial code obeying ALL CRITICAL RULES. MAKE SURE IT IS 100% READY TO RUN."
 
-        # 🚨 Recency Bias Injection: Placing the strict auth instruction at the very end to guarantee compliance.
         full_prompt += f"\n\n{auth_instruction}"
             
         generated_code = ""
