@@ -42,15 +42,16 @@ def clean_python_code(code_str):
     final_lines = []
     for line in cleaned_code.split('\n'):
         line_str = line.strip()
+        lower_line = line_str.lower()
         if line_str.startswith('st.set_page_config'): continue
         if line_str.startswith('st.footer'): continue
-        if 'import supabase' in line_str or 'from supabase' in line_str: continue
-        if 'create_client(' in line_str or 'supabase.create_client' in line_str: continue
-        # 🚨 Force remove dummy credentials if AI disobeys
-        lower_line = line_str.lower()
+        if 'import supabase' in lower_line or 'from supabase' in lower_line: continue
+        if 'create_client' in lower_line: continue
+        # 🚨 AI එක බලෙන් දාන බොරු Credentials සම්පූර්ණයෙන්ම අයින් කිරීම
         if 'supabase_url' in lower_line and '=' in lower_line: continue 
         if 'supabase_key' in lower_line and '=' in lower_line: continue 
         if 'supabase_secret' in lower_line and '=' in lower_line: continue 
+        if 'client =' in lower_line and 'supabase' in lower_line: continue
         final_lines.append(line)
     return '\n'.join(final_lines).strip()
 
@@ -104,18 +105,19 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
         safe_prefix = re.sub(r'[^a-zA-Z0-9]', '', str(app_data.get('app_name', 'app'))).lower()
         if not safe_prefix: safe_prefix = "custom_app"
         
-        # 🪄 SUPER MAGIC: Advanced Constraint Handling
+        # 🪄 SUPER MAGIC: Ultimate Constraint Handling
         auth_instruction = ""
         user_prompt_lower = last_user_prompt.lower()
         if any(word in user_prompt_lower for word in ["ඕනි නෑ", "ඕනෙ නෑ", "එපා", "නොමැතිව", "no login", "no auth", "without login"]):
             auth_instruction = """
-            🚨🚨🚨 [ABSOLUTE CRITICAL DIRECTIVE - NO AUTHENTICATION] 🚨🚨🚨
-            The user has STRICTLY FORBIDDEN Login and Registration functionalities. 
-            YOU MUST NOT generate any forms for login or registration. 
-            YOU MUST NOT write functions like 'login_user' or 'register_user'.
-            YOU MUST NOT use `st.session_state.logged_in`.
-            IGNORE your standard SaaS/App templates.
-            START THE MAIN APP CONTENT (like viewing videos, playing, uploading) DIRECTLY on the home page!
+            ⛔⛔⛔ FATAL RULE: ZERO AUTHENTICATION ⛔⛔⛔
+            THE USER STRICTLY COMMANDED: NO LOGIN AND NO REGISTRATION!
+            - DO NOT CREATE 'Login' or 'Register' tabs.
+            - DO NOT prompt for passwords.
+            - DO NOT create user management functions.
+            - DO NOT use `st.session_state.logged_in`.
+            - START THE MAIN APP FEATURES IMMEDIATELY ON THE HOME SCREEN.
+            - IF YOU GENERATE LOGIN CODE, THE SYSTEM WILL CRASH.
             """
 
         db_prompt = f"""
@@ -132,13 +134,12 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
         2. You MUST prefix ALL tables for this app with '{safe_prefix}_' (e.g., '{safe_prefix}_videos').
         3. Ensure every table has an 'id' (UUID PRIMARY KEY DEFAULT gen_random_uuid()) and a 'created_at' column.
         4. If the user explicitly requested NO LOGIN, DO NOT create any user or auth tables.
-        5. SECURITY BYPASS (CRITICAL): You MUST append these two lines for EVERY table you create, otherwise the app will crash with PGRST205:
+        5. SECURITY BYPASS (CRITICAL): You MUST append these two lines for EVERY table you create:
            ALTER TABLE {safe_prefix}_<table_name> DISABLE ROW LEVEL SECURITY;
            GRANT ALL ON TABLE {safe_prefix}_<table_name> TO anon, authenticated, service_role;
+        6. NO MARKDOWN. NO ```sql tags. Output purely raw SQL text separated by semicolons.
         
         If NO: Output EXACTLY the word: NO_DB
-        
-        Output ONLY raw SQL or NO_DB. No explanations, no markdown.
         """
         
         db_schema_sql = ""
@@ -161,10 +162,14 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
                     port=parsed.port or 5432, database=parsed.path.lstrip('/')
                 )
                 clean_sql = db_schema_sql.replace("```sql", "").replace("```", "").strip()
-                conn.run(clean_sql)
+                # 🚨 SQL Execution Fix: Split and execute line by line to prevent crashes
+                sql_statements = [s.strip() for s in clean_sql.split(';') if s.strip()]
+                for stmt in sql_statements:
+                    conn.run(stmt)
+                
                 conn.run("NOTIFY pgrst, 'reload schema'")
                 conn.close()
-                time.sleep(3) # Give Supabase Cache 3 seconds to reload
+                time.sleep(3) # Give Supabase time to reload cache
             except Exception as dbe: 
                 print("DB Schema Execution Error:", dbe)
                 pass
@@ -183,16 +188,16 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
         
         CRITICAL RULES (VIOLATING THESE WILL CAUSE FATAL ERRORS):
         1. PURE PYTHON CODE ONLY. NO markdown. Start immediately with import streamlit as st.
-        2. NO SUPABASE INITIALIZATION (CRITICAL): NEVER define `supabase_url`, `supabase_key` or use `create_client()`. The `supabase` object is ALREADY INJECTED globally into the environment. Just use it directly (e.g., `res = supabase.table('tbl').select('*').execute()`).
+        2. NO SUPABASE INITIALIZATION (CRITICAL): NEVER define `supabase_url`, `supabase_key` or use `create_client()`. The `supabase` object is ALREADY INJECTED globally. Use it directly (e.g., `res = supabase.table('tbl').select('*').execute()`).
         3. SUPABASE V2 SYNTAX (CRITICAL): You MUST append `.execute()` to EVERY Supabase query. To read data, you MUST use `.data`.
-            - RIGHT (Read): `res = supabase.table('tbl').select('*').execute(); data = res.data`
-            - WRONG (Read): `data = supabase.table('tbl').select('*')` 
-        4. DATABASE MATCHING: If a DATABASE EXISTS schema is provided below, you MUST use EXACTLY those specific table names (e.g., '{safe_prefix}_xyz'). DO NOT invent generic table names unless they are defined below.
+            - RIGHT: `res = supabase.table('tbl').select('*').execute(); data = res.data`
+            - WRONG: `data = supabase.table('tbl').select('*')` 
+        4. DATABASE MATCHING: If a DATABASE EXISTS schema is provided below, you MUST use EXACTLY those specific table names (e.g., '{safe_prefix}_xyz'). DO NOT invent generic table names.
         5. UNIQUE KEYS: EVERY st.input/button MUST have a unique `key=`.
         6. TABS RULE: NEVER use `key=` in `st.tabs`. ALWAYS use `tab1, tab2 = st.tabs(["A", "B"])` and `with tab1:`.
-        7. ZERO PLACEHOLDERS: You MUST generate the ENTIRE, 100% COMPLETE, FUNCTIONAL application code. Do not write "add logic here".
-        8. EXCEPTION HANDLING: Catch all errors using a generic `except Exception as e:`. NEVER import or use `supabase.exceptions`.
-        9. PREMIUM UI/UX: The user demands high quality. Use `with st.container(border=True):`, `st.columns()`, clear headers, and modern layouts.
+        7. ZERO PLACEHOLDERS: Generate the ENTIRE, 100% COMPLETE application.
+        8. EXCEPTION HANDLING: Catch all errors using a generic `except Exception as e:`. NEVER import `supabase.exceptions`.
+        9. PREMIUM UI/UX: Use `with st.container(border=True):`, `st.columns()`, and modern layouts.
         """
         
         if db_schema_sql and "NO_DB" not in db_schema_sql.upper(): 
@@ -209,7 +214,7 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
         else: 
             full_prompt += "\nWrite the complete initial code obeying ALL CRITICAL RULES. MAKE SURE IT IS 100% READY TO RUN."
 
-        # 🚨 Recency Bias Injection: Placing the strict auth instruction at the very end.
+        # 🚨 Recency Bias Injection: Placing the strict auth instruction at the very end to guarantee compliance.
         full_prompt += f"\n\n{auth_instruction}"
             
         generated_code = ""
@@ -373,7 +378,7 @@ def render_app_card(app, is_admin=False):
                                 else:
                                     with st.spinner("🚀 Build කරමින් පවතී..."):
                                         headers = {"Accept": "application/vnd.github.v3+json", "Authorization": f"token {clean_token}"}
-                                        custom_app_url = f"https://ai-app-builder-x6qbi2k3iobvvzqbktkfma.streamlit.app/?app_id={str(app['id'])}"
+                                        custom_app_url = f"[https://ai-app-builder-x6qbi2k3iobvvzqbktkfma.streamlit.app/?app_id=](https://ai-app-builder-x6qbi2k3iobvvzqbktkfma.streamlit.app/?app_id=){str(app['id'])}"
                                         payload = {
                                             "event_type": "build_apk",
                                             "client_payload": {
@@ -382,7 +387,7 @@ def render_app_card(app, is_admin=False):
                                                 "app_icon_url": app.get('app_icon_url', ''), "app_url": custom_app_url
                                             }
                                         }
-                                        res = requests.post(f"https://api.github.com/repos/{clean_repo}/dispatches", json=payload, headers=headers)
+                                        res = requests.post(f"[https://api.github.com/repos/](https://api.github.com/repos/){clean_repo}/dispatches", json=payload, headers=headers)
                                         if res.status_code == 204:
                                             st.success(f"✅ APK එක සෑදීම ආරම්භ විය! කරුණාකර විනාඩි 2ක් හෝ 3ක් රැඳී සිට පහත බොත්තම ඔබන්න.")
                                         else: 
@@ -400,7 +405,7 @@ def render_app_card(app, is_admin=False):
                                     clean_repo = re.sub(r'[^a-zA-Z0-9_./-]', '', raw_repo)
                                     
                                     headers = {"Authorization": f"token {clean_token}"}
-                                    url = f"https://api.github.com/repos/{clean_repo}/actions/artifacts"
+                                    url = f"[https://api.github.com/repos/](https://api.github.com/repos/){clean_repo}/actions/artifacts"
                                     req = requests.get(url, headers=headers)
                                     
                                     if req.status_code == 200:
