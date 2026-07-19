@@ -47,7 +47,7 @@ def clean_python_code(code_str):
         if line_str.startswith('st.footer'): continue
         if 'import supabase' in lower_line or 'from supabase' in lower_line: continue
         if 'create_client' in lower_line: continue
-        # 🚨 Ultimate Dummy Data Remover (App එක කඩන බොරු කේත සියල්ල ඉවත් කරයි)
+        # Dummy credentials and bad libraries remover
         if 'supabase_url' in lower_line and '=' in lower_line: continue 
         if 'supabase_key' in lower_line and '=' in lower_line: continue 
         if 'supabase_secret' in lower_line and '=' in lower_line: continue 
@@ -107,7 +107,6 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
         safe_prefix = re.sub(r'[^a-zA-Z0-9]', '', str(app_data.get('app_name', 'app'))).lower()
         if not safe_prefix: safe_prefix = "custom_app"
         
-        # 🪄 SUPER MAGIC: Ultimate Constraint Handling
         auth_instruction = ""
         user_prompt_lower = last_user_prompt.lower()
         if any(word in user_prompt_lower for word in ["ඕනි නෑ", "ඕනෙ නෑ", "එපා", "නොමැතිව", "no login", "no auth", "without login"]):
@@ -194,9 +193,12 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
         4. STRICT IMPORTS RULE (CRITICAL): You may ONLY import standard Python libraries and 'streamlit', 'requests', 'pandas', 'plotly'. YOU ARE STRICTLY FORBIDDEN from importing 'bs4', 'beautifulsoup4', 'numpy', or any other unapproved external library.
         5. UNIQUE KEYS: EVERY st.input/button MUST have a unique `key=`.
         6. TABS RULE: NEVER use `key=` in `st.tabs`. ALWAYS use `tab1, tab2 = st.tabs(["A", "B"])` and `with tab1:`.
-        7. ZERO PLACEHOLDERS: Generate the ENTIRE, 100% COMPLETE application.
-        8. EXCEPTION HANDLING: Catch all errors using a generic `except Exception as e:`. NEVER import `supabase.exceptions`.
-        9. PREMIUM UI/UX: Use `with st.container(border=True):`, `st.columns()`, and modern layouts.
+        7. EXCEPTION HANDLING: Catch all errors using a generic `except Exception as e:`. NEVER import `supabase.exceptions`.
+        8. 📱 MOBILE-FIRST PREMIUM UI/UX (EXTREMELY CRITICAL): The user expects a stunning, modern MOBILE APP interface (e.g., a YouTube clone).
+            - DO NOT use basic, ugly vertical forms.
+            - USE `st.columns` for grids, menus, and media layouts.
+            - USE `st.markdown` with custom CSS for beautiful video thumbnails, rich text, rounded corners, and spacing.
+            - Structure the layout so it looks incredible and professional inside a mobile phone screen constraint.
         """
         
         if db_schema_sql and "NO_DB" not in db_schema_sql.upper(): 
@@ -211,7 +213,7 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
                     full_prompt += f"User: {msg['content']}\n"
             full_prompt += "\nPlease rewrite the entire code flawlessly while obeying ALL CRITICAL RULES. DO NOT OMIT ANY PREVIOUS FEATURES."
         else: 
-            full_prompt += "\nWrite the complete initial code obeying ALL CRITICAL RULES. MAKE SURE IT IS 100% READY TO RUN."
+            full_prompt += "\nWrite the complete initial code obeying ALL CRITICAL RULES. MAKE SURE IT IS 100% READY TO RUN AND BEAUTIFUL."
 
         full_prompt += f"\n\n{auth_instruction}"
             
@@ -323,22 +325,29 @@ def render_app_card(app, is_admin=False):
                     if preview_active:
                         try:
                             safe_code = clean_python_code(current_code)
-                            st.markdown("### 📱 Live App Demo")
-                            with st.container(border=True): 
-                                exec_globals = globals().copy()
-                                if 'supabase' in exec_globals:
-                                    del exec_globals['supabase']
-                                exec_globals['supabase'] = get_db(is_admin)
-                                
-                                exec_globals['__name__'] = '__main__'
-                                
-                                try:
-                                    exec(safe_code, exec_globals)
-                                except Exception as inner_e:
-                                    if 'PGRST205' in str(inner_e) or 'Could not find the table' in str(inner_e):
-                                        st.warning("⏳ AI එක අලුත් දත්ත ගබඩාවක් (Database Table) නිර්මාණය කරමින් පවතී. කරුණාකර තත්පර 15කින් පමණ නැවත බලන්න.")
-                                    else:
-                                        st.error(f"Preview Error: {inner_e}")
+                            
+                            # 📱 MOBILE SIMULATOR UI
+                            st.markdown("<h4 style='text-align: center; color: #888;'>📱 Mobile View Simulator</h4>", unsafe_allow_html=True)
+                            
+                            # Columns used to constrain width
+                            spacer1, phone_col, spacer2 = st.columns([1, 1.5, 1])
+                            
+                            with phone_col:
+                                # Fixed height container simulates a mobile device screen
+                                with st.container(height=750, border=True):
+                                    exec_globals = globals().copy()
+                                    if 'supabase' in exec_globals:
+                                        del exec_globals['supabase']
+                                    exec_globals['supabase'] = get_db(is_admin)
+                                    exec_globals['__name__'] = '__main__'
+                                    
+                                    try:
+                                        exec(safe_code, exec_globals)
+                                    except Exception as inner_e:
+                                        if 'PGRST205' in str(inner_e) or 'Could not find the table' in str(inner_e):
+                                            st.warning("⏳ AI එක අලුත් දත්ත ගබඩාවක් (Database Table) නිර්මාණය කරමින් පවතී. කරුණාකර තත්පර 15කින් පමණ නැවත බලන්න.")
+                                        else:
+                                            st.error(f"Preview Error: {inner_e}")
                         except Exception as e: 
                             st.error(f"Preview Initialization Error: {e}")
                             
