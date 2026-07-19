@@ -163,3 +163,45 @@ def render_admin_app_management():
             generator.render_app_card(app, is_admin=True)
     else:
         st.info("කිසිදු App එකක් පද්ධතියේ නොමැත.")
+
+# --- Phase 6: Admin Support Management ---
+def render_support_management():
+    st.markdown("### 🎧 Support Tickets Management")
+    admin_db = get_admin_db()
+    
+    status_filter = st.radio("Filter Tickets:", ["Open", "Closed", "All"], horizontal=True)
+    
+    query = admin_db.table("support_tickets").select("*").order("created_at", desc=True)
+    if status_filter == "Open":
+        query = query.eq("status", "open")
+    elif status_filter == "Closed":
+        query = query.eq("status", "closed")
+        
+    res = query.execute()
+    
+    if res.data:
+        for t in res.data:
+            status_icon = "🟢 OPEN" if t['status'] == 'open' else "🔴 CLOSED"
+            with st.expander(f"Ticket #{str(t['id'])[:8]} | User: {t.get('email', 'Unknown')} | Status: {status_icon}"):
+                st.write(f"**පණිවිඩය (Message):** {t['message']}")
+                st.caption(f"Time: {t['created_at'][:19].replace('T', ' ')}")
+                
+                current_reply = t.get('admin_reply') or ''
+                new_reply = st.text_area("ඔබගේ පිළිතුර (Reply):", value=current_reply, key=f"reply_{t['id']}")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("💾 Send Reply & Close Ticket", key=f"btn_reply_{t['id']}", type="primary"):
+                        admin_db.table("support_tickets").update({
+                            "admin_reply": new_reply,
+                            "status": "closed"
+                        }).eq("id", t['id']).execute()
+                        st.success("Reply successfully sent and ticket closed!")
+                        time.sleep(1)
+                        st.rerun()
+                with col2:
+                    if st.button("🗑️ Delete Ticket", key=f"btn_del_{t['id']}"):
+                        admin_db.table("support_tickets").delete().eq("id", t['id']).execute()
+                        st.rerun()
+    else:
+        st.info("No tickets found matching the filter.")
