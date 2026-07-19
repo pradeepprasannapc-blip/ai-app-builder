@@ -45,8 +45,12 @@ def init_database_schema():
             conn.run("CREATE TABLE IF NOT EXISTS system_settings (setting_key TEXT PRIMARY KEY, setting_value JSONB);")
             conn.run("CREATE TABLE IF NOT EXISTS device_logs (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id UUID, device_id TEXT, ip_address TEXT, country TEXT, created_at TIMESTAMPTZ DEFAULT NOW());")
             
+            # Phase 6: Support Tickets Table
+            conn.run("CREATE TABLE IF NOT EXISTS support_tickets (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id UUID, email TEXT, message TEXT, status TEXT DEFAULT 'open', admin_reply TEXT, created_at TIMESTAMPTZ DEFAULT NOW());")
+            
             conn.run("ALTER TABLE users DISABLE ROW LEVEL SECURITY;")
             conn.run("ALTER TABLE device_logs DISABLE ROW LEVEL SECURITY;")
+            conn.run("ALTER TABLE support_tickets DISABLE ROW LEVEL SECURITY;")
             
             conn.run("NOTIFY pgrst, 'reload schema'")
             conn.close()
@@ -65,11 +69,16 @@ def clean_python_code(code_str):
     final_lines = []
     for line in cleaned_code.split('\n'):
         line_str = line.strip()
+        lower_line = line_str.lower()
         if line_str.startswith('st.set_page_config'): continue
         if line_str.startswith('st.footer'): continue
-        # යාවත්කාලීන කළ කොටස - Supabase Imports සම්පූර්ණයෙන්ම ඉවත් කිරීම
-        if 'import supabase' in line_str or 'from supabase' in line_str: continue
-        if 'create_client(' in line_str: continue
+        if 'import supabase' in lower_line or 'from supabase' in lower_line: continue
+        if 'create_client' in lower_line: continue
+        if 'supabase_url' in lower_line and '=' in lower_line: continue 
+        if 'supabase_key' in lower_line and '=' in lower_line: continue 
+        if 'supabase_secret' in lower_line and '=' in lower_line: continue 
+        if 'client =' in lower_line and 'supabase' in lower_line: continue
+        if 'import bs4' in lower_line or 'from bs4' in lower_line or 'beautifulsoup' in lower_line: continue
         final_lines.append(line)
     return '\n'.join(final_lines).strip()
 
@@ -103,9 +112,9 @@ if "app_id" in query_params:
 
 def get_user_ip_and_country():
     try:
-        res = requests.get('https://api64.ipify.org?format=json', timeout=3).json()
+        res = requests.get('[https://api64.ipify.org?format=json](https://api64.ipify.org?format=json)', timeout=3).json()
         ip = res.get("ip", "Unknown")
-        c_res = requests.get(f'https://ipapi.co/{ip}/json/', timeout=3).json()
+        c_res = requests.get(f'[https://ipapi.co/](https://ipapi.co/){ip}/json/', timeout=3).json()
         return ip, c_res.get("country_name", "Unknown")
     except:
         return "Unknown", "Unknown"
@@ -170,6 +179,48 @@ def register(email, password):
     except Exception as e:
         st.error(f"Error: {e}")
 
+# --- Phase 6: User Support Function ---
+def render_user_support():
+    st.markdown("### 🎧 පාරිභෝගික සහාය (Customer Support)")
+    st.write("ඔබට ඇති ගැටළු හෝ යෝජනා අප වෙත යොමු කරන්න. අපගේ කණ්ඩායම හැකි ඉක්මනින් ඔබට පිළිතුරු ලබා දෙනු ඇත.")
+    
+    with st.form("support_form"):
+        message = st.text_area("ඔබේ පණිවිඩය මෙහි ලියන්න:", height=120)
+        if st.form_submit_button("පණිවිඩය යවන්න 🚀", type="primary"):
+            if message.strip():
+                try:
+                    supabase.table("support_tickets").insert({
+                        "user_id": st.session_state.user.id,
+                        "email": st.session_state.user.email,
+                        "message": message,
+                        "status": "open"
+                    }).execute()
+                    st.success("✅ ඔබගේ පණිවිඩය සාර්ථකව යවන ලදී!")
+                    time.sleep(1)
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error sending message: {e}")
+            else:
+                st.warning("කරුණාකර පණිවිඩයක් ඇතුළත් කරන්න.")
+
+    st.markdown("---")
+    st.markdown("#### 📥 ඔබගේ පෙර පණිවිඩ සහ පිළිතුරු")
+    try:
+        res = supabase.table("support_tickets").select("*").eq("user_id", st.session_state.user.id).order("created_at", desc=True).execute()
+        if res.data:
+            for ticket in res.data:
+                status_icon = "🟢 විවෘතයි (Open)" if ticket['status'] == 'open' else "🔴 විසඳා ඇත (Closed)"
+                with st.expander(f"Ticket #{str(ticket['id'])[:8]} | {status_icon} | {ticket['created_at'][:10]}"):
+                    st.info(f"**ඔබගේ පණිවිඩය:** {ticket['message']}")
+                    if ticket.get('admin_reply'):
+                        st.success(f"**Admin ගේ පිළිතුර:** {ticket['admin_reply']}")
+                    else:
+                        st.warning("⏳ තවම පිළිතුරක් ලබා දී නොමැත. කරුණාකර රැඳී සිටින්න.")
+        else:
+            st.info("ඔබ තවම කිසිදු පණිවිඩයක් යවා නොමැත.")
+    except Exception as e:
+        pass
+
 if not st.session_state.user:
     st.markdown("<h1 style='text-align: center; color: #4B4B4B;'>⚡ AI App Factory</h1>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -205,22 +256,25 @@ else:
 
     if st.session_state.role == 'owner':
         st.title("👑 Owner Dashboard")
-        t1, t2, t3, t4, t5 = st.tabs(["🚀 Generator", "💰 Approvals", "⚡ God Mode", "📱 Global Apps", "⚙️ Admin Settings"])
+        t1, t2, t3, t4, t5, t6 = st.tabs(["🚀 Generator", "💰 Approvals", "⚡ God Mode", "📱 Global Apps", "🎧 Support Tickets", "⚙️ Admin Settings"])
         with t1: generator.render_generator_dashboard()
         with t2: admin.render_payment_approvals()
         with t3: admin.render_god_mode()
         with t4: admin.render_admin_app_management()
-        with t5: admin.render_admin_settings()
+        with t5: admin.render_support_management() # Phase 6
+        with t6: admin.render_admin_settings()
             
     elif st.session_state.role == 'admin':
         st.title("🛡️ Admin Dashboard")
-        t1, t2, t3 = st.tabs(["🚀 Generator", "💰 Approvals", "📱 Global Apps"])
+        t1, t2, t3, t4 = st.tabs(["🚀 Generator", "💰 Approvals", "📱 Global Apps", "🎧 Support Tickets"])
         with t1: generator.render_generator_dashboard()
         with t2: admin.render_payment_approvals()
         with t3: admin.render_admin_app_management()
+        with t4: admin.render_support_management() # Phase 6
         
     elif st.session_state.role in ['user', 'moderator']:
         st.title("🚀 User Dashboard")
-        t1, t2 = st.tabs(["🚀 App Generator", "💳 Upgrade Package"])
+        t1, t2, t3 = st.tabs(["🚀 App Generator", "💳 Upgrade Package", "🎧 Support"])
         with t1: generator.render_generator_dashboard()
         with t2: generator.render_upgrade_section()
+        with t3: render_user_support() # Phase 6
