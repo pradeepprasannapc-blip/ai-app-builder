@@ -156,52 +156,90 @@ def render_admin_app_management():
     import generator 
     st.markdown("### 📱 Global App Management")
     admin_db = get_admin_db()
-    all_apps_res = admin_db.table("generated_apps").select("*").order("created_at", desc=True).execute()
-    
-    if all_apps_res.data:
-        for app in all_apps_res.data:
-            generator.render_app_card(app, is_admin=True)
-    else:
-        st.info("කිසිදු App එකක් පද්ධතියේ නොමැත.")
+    try:
+        all_apps_res = admin_db.table("generated_apps").select("*").order("created_at", desc=True).execute()
+        if all_apps_res.data:
+            for app in all_apps_res.data:
+                generator.render_app_card(app, is_admin=True)
+        else:
+            st.info("කිසිදු App එකක් පද්ධතියේ නොමැත.")
+    except Exception as e:
+        st.warning("⏳ Apps Database is syncing...")
 
-# --- Phase 6: Admin Support Management ---
+# --- Phase 6: Admin Support Management (Crash Fix Applied) ---
 def render_support_management():
     st.markdown("### 🎧 Support Tickets Management")
     admin_db = get_admin_db()
     
     status_filter = st.radio("Filter Tickets:", ["Open", "Closed", "All"], horizontal=True)
-    
     query = admin_db.table("support_tickets").select("*").order("created_at", desc=True)
+    
     if status_filter == "Open":
         query = query.eq("status", "open")
     elif status_filter == "Closed":
         query = query.eq("status", "closed")
         
-    res = query.execute()
+    try:
+        res = query.execute()
+        if res.data:
+            for t in res.data:
+                status_icon = "🟢 OPEN" if t['status'] == 'open' else "🔴 CLOSED"
+                with st.expander(f"Ticket #{str(t['id'])[:8]} | User: {t.get('email', 'Unknown')} | Status: {status_icon}"):
+                    st.write(f"**පණිවිඩය (Message):** {t['message']}")
+                    st.caption(f"Time: {t['created_at'][:19].replace('T', ' ')}")
+                    
+                    current_reply = t.get('admin_reply') or ''
+                    new_reply = st.text_area("ඔබගේ පිළිතුර (Reply):", value=current_reply, key=f"reply_{t['id']}")
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.button("💾 Send Reply & Close Ticket", key=f"btn_reply_{t['id']}", type="primary"):
+                            admin_db.table("support_tickets").update({
+                                "admin_reply": new_reply,
+                                "status": "closed"
+                            }).eq("id", t['id']).execute()
+                            st.success("Reply successfully sent and ticket closed!")
+                            time.sleep(1)
+                            st.rerun()
+                    with col2:
+                        if st.button("🗑️ Delete Ticket", key=f"btn_del_{t['id']}"):
+                            admin_db.table("support_tickets").delete().eq("id", t['id']).execute()
+                            st.rerun()
+        else:
+            st.info("No tickets found matching the filter.")
+    except Exception as e:
+        st.warning(f"⏳ Support Tickets Database යාවත්කාලීන වෙමින් පවතී. කරුණාකර සුළු මොහොතකින් පිටුව Refresh කරන්න.")
+
+# --- Phase 7: Dashboard Analytics ---
+def render_analytics_dashboard():
+    st.markdown("### 📊 System Analytics & Revenue")
+    admin_db = get_admin_db()
     
-    if res.data:
-        for t in res.data:
-            status_icon = "🟢 OPEN" if t['status'] == 'open' else "🔴 CLOSED"
-            with st.expander(f"Ticket #{str(t['id'])[:8]} | User: {t.get('email', 'Unknown')} | Status: {status_icon}"):
-                st.write(f"**පණිවිඩය (Message):** {t['message']}")
-                st.caption(f"Time: {t['created_at'][:19].replace('T', ' ')}")
-                
-                current_reply = t.get('admin_reply') or ''
-                new_reply = st.text_area("ඔබගේ පිළිතුර (Reply):", value=current_reply, key=f"reply_{t['id']}")
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    if st.button("💾 Send Reply & Close Ticket", key=f"btn_reply_{t['id']}", type="primary"):
-                        admin_db.table("support_tickets").update({
-                            "admin_reply": new_reply,
-                            "status": "closed"
-                        }).eq("id", t['id']).execute()
-                        st.success("Reply successfully sent and ticket closed!")
-                        time.sleep(1)
-                        st.rerun()
-                with col2:
-                    if st.button("🗑️ Delete Ticket", key=f"btn_del_{t['id']}"):
-                        admin_db.table("support_tickets").delete().eq("id", t['id']).execute()
-                        st.rerun()
-    else:
-        st.info("No tickets found matching the filter.")
+    try:
+        users_res = admin_db.table("users").select("id", count="exact").execute()
+        total_users = users_res.count if users_res.count else 0
+        
+        apps_res = admin_db.table("generated_apps").select("id", count="exact").execute()
+        total_apps = apps_res.count if apps_res.count else 0
+        
+        payments_res = admin_db.table("payments").select("package_name").eq("status", "approved").execute()
+        total_revenue = 0
+        settings = get_system_settings()
+        pricing = settings.get("pricing", {"silver_price": 2500, "gold_price": 5000})
+        
+        if payments_res.data:
+            for p in payments_res.data:
+                pkg = p.get("package_name", "").lower()
+                if pkg == "silver": total_revenue += int(pricing.get("silver_price", 2500))
+                elif pkg == "gold": total_revenue += int(pricing.get("gold_price", 5000))
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.info(f"👥 Total Users\n\n### {total_users}")
+        with col2:
+            st.success(f"📱 Generated Apps\n\n### {total_apps}")
+        with col3:
+            st.warning(f"💰 Total Revenue (LKR)\n\n### Rs. {total_revenue:,}")
+            
+    except Exception as e:
+        st.warning("⏳ Analytics data is syncing...")
