@@ -47,12 +47,13 @@ def clean_python_code(code_str):
         if line_str.startswith('st.footer'): continue
         if 'import supabase' in lower_line or 'from supabase' in lower_line: continue
         if 'create_client' in lower_line: continue
-        # 🚨 AI එක බලෙන් දාන බොරු Credentials සහ අනවශ්‍ය Libraries අයින් කිරීම
+        # 🚨 Ultimate Dummy Data Remover (App එක කඩන බොරු කේත සියල්ල ඉවත් කරයි)
         if 'supabase_url' in lower_line and '=' in lower_line: continue 
         if 'supabase_key' in lower_line and '=' in lower_line: continue 
         if 'supabase_secret' in lower_line and '=' in lower_line: continue 
+        if 'your-supabase' in lower_line or 'your_supabase' in lower_line: continue
         if 'client =' in lower_line and 'supabase' in lower_line: continue
-        if 'import bs4' in lower_line or 'from bs4' in lower_line or 'beautifulsoup' in lower_line: continue # BS4 Error Fix
+        if 'import bs4' in lower_line or 'from bs4' in lower_line or 'beautifulsoup' in lower_line: continue
         final_lines.append(line)
     return '\n'.join(final_lines).strip()
 
@@ -106,6 +107,7 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
         safe_prefix = re.sub(r'[^a-zA-Z0-9]', '', str(app_data.get('app_name', 'app'))).lower()
         if not safe_prefix: safe_prefix = "custom_app"
         
+        # 🪄 SUPER MAGIC: Ultimate Constraint Handling
         auth_instruction = ""
         user_prompt_lower = last_user_prompt.lower()
         if any(word in user_prompt_lower for word in ["ඕනි නෑ", "ඕනෙ නෑ", "එපා", "නොමැතිව", "no login", "no auth", "without login"]):
@@ -117,6 +119,7 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
             - DO NOT create user management functions.
             - DO NOT use `st.session_state.logged_in`.
             - START THE MAIN APP FEATURES IMMEDIATELY ON THE HOME SCREEN.
+            - IF YOU GENERATE LOGIN CODE, THE SYSTEM WILL CRASH.
             """
 
         db_prompt = f"""
