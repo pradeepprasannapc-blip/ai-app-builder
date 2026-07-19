@@ -166,7 +166,7 @@ def render_admin_app_management():
     except Exception as e:
         st.warning("⏳ Apps Database is syncing...")
 
-# --- Phase 6: Admin Support Management (Crash Fix Applied) ---
+# --- Phase 6: Admin Support Management ---
 def render_support_management():
     st.markdown("### 🎧 Support Tickets Management")
     admin_db = get_admin_db()
