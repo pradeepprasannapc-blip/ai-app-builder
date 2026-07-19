@@ -77,6 +77,7 @@ def clean_python_code(code_str):
         if 'supabase_url' in lower_line and '=' in lower_line: continue 
         if 'supabase_key' in lower_line and '=' in lower_line: continue 
         if 'supabase_secret' in lower_line and '=' in lower_line: continue 
+        if 'your-supabase' in lower_line or 'your_supabase' in lower_line: continue
         if 'client =' in lower_line and 'supabase' in lower_line: continue
         if 'import bs4' in lower_line or 'from bs4' in lower_line or 'beautifulsoup' in lower_line: continue
         final_lines.append(line)
@@ -112,9 +113,9 @@ if "app_id" in query_params:
 
 def get_user_ip_and_country():
     try:
-        res = requests.get('[https://api64.ipify.org?format=json](https://api64.ipify.org?format=json)', timeout=3).json()
+        res = requests.get('https://api64.ipify.org?format=json', timeout=3).json()
         ip = res.get("ip", "Unknown")
-        c_res = requests.get(f'[https://ipapi.co/](https://ipapi.co/){ip}/json/', timeout=3).json()
+        c_res = requests.get(f'https://ipapi.co/{ip}/json/', timeout=3).json()
         return ip, c_res.get("country_name", "Unknown")
     except:
         return "Unknown", "Unknown"
@@ -256,21 +257,23 @@ else:
 
     if st.session_state.role == 'owner':
         st.title("👑 Owner Dashboard")
-        t1, t2, t3, t4, t5, t6 = st.tabs(["🚀 Generator", "💰 Approvals", "⚡ God Mode", "📱 Global Apps", "🎧 Support Tickets", "⚙️ Admin Settings"])
+        t1, t2, t3, t4, t5, t6, t7 = st.tabs(["🚀 Generator", "📊 Analytics", "💰 Approvals", "⚡ God Mode", "📱 Global Apps", "🎧 Support", "⚙️ Settings"])
         with t1: generator.render_generator_dashboard()
-        with t2: admin.render_payment_approvals()
-        with t3: admin.render_god_mode()
-        with t4: admin.render_admin_app_management()
-        with t5: admin.render_support_management() # Phase 6
-        with t6: admin.render_admin_settings()
+        with t2: admin.render_analytics_dashboard() # Phase 7
+        with t3: admin.render_payment_approvals()
+        with t4: admin.render_god_mode()
+        with t5: admin.render_admin_app_management()
+        with t6: admin.render_support_management() # Phase 6
+        with t7: admin.render_admin_settings()
             
     elif st.session_state.role == 'admin':
         st.title("🛡️ Admin Dashboard")
-        t1, t2, t3, t4 = st.tabs(["🚀 Generator", "💰 Approvals", "📱 Global Apps", "🎧 Support Tickets"])
+        t1, t2, t3, t4, t5 = st.tabs(["🚀 Generator", "📊 Analytics", "💰 Approvals", "📱 Global Apps", "🎧 Support"])
         with t1: generator.render_generator_dashboard()
-        with t2: admin.render_payment_approvals()
-        with t3: admin.render_admin_app_management()
-        with t4: admin.render_support_management() # Phase 6
+        with t2: admin.render_analytics_dashboard() # Phase 7
+        with t3: admin.render_payment_approvals()
+        with t4: admin.render_admin_app_management()
+        with t5: admin.render_support_management() # Phase 6
         
     elif st.session_state.role in ['user', 'moderator']:
         st.title("🚀 User Dashboard")
