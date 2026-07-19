@@ -191,19 +191,21 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
         
         CRITICAL RULES (VIOLATING THESE WILL CAUSE FATAL ERRORS):
         1. PURE PYTHON CODE ONLY. NO markdown. Start immediately with import streamlit as st.
-        2. NO SUPABASE INITIALIZATION (CRITICAL): NEVER define `supabase_url`, `supabase_key` or use `create_client()`. The `supabase` object is ALREADY INJECTED globally. Use it directly (e.g., `res = supabase.table('tbl').select('*').execute()`).
-        3. SUPABASE V2 SYNTAX (CRITICAL): You MUST append `.execute()` to EVERY Supabase query. To read data, you MUST use `.data`.
+        2. NO SUPABASE INITIALIZATION (CRITICAL): NEVER define `supabase_url`, `supabase_key` or use `create_client()`. The `supabase` object is ALREADY INJECTED globally. Use it directly.
+        3. SUPABASE V2 SYNTAX (CRITICAL - AVOID 'SyncRequestBuilder' ERROR): 
+           - To read or filter data, you MUST call `.select('*')` IMMEDIATELY after `.table('tbl')` BEFORE calling `.order()`, `.eq()`, or `.limit()`.
+           - RIGHT: `data = supabase.table('tbl').select('*').order('created_at', desc=True).execute().data`
+           - WRONG: `data = supabase.table('tbl').order('created_at').execute()` -> This causes 'SyncRequestBuilder' has no attribute 'order' error!
+           - You MUST append `.execute()` to EVERY query.
         4. STRICT IMPORTS RULE (CRITICAL): You may ONLY import standard Python libraries and 'streamlit', 'requests', 'pandas', 'plotly'. YOU ARE STRICTLY FORBIDDEN from importing 'bs4', 'beautifulsoup4', 'numpy', or any other unapproved external library.
         5. UNIQUE KEYS: EVERY st.input/button MUST have a unique `key=`.
-        6. TABS RULE: NEVER use `key=` in `st.tabs`. ALWAYS use `tab1, tab2 = st.tabs(["A", "B"])` and `with tab1:`.
+        6. TABS RULE: NEVER use `key=` in `st.tabs`.
         7. EXCEPTION HANDLING: Catch all errors using a generic `except Exception as e:`. NEVER import `supabase.exceptions`.
         8. 📱 MOBILE-FIRST PREMIUM UI/UX (EXTREMELY CRITICAL): 
             - The user expects a stunning, modern MOBILE APP interface (e.g., like a YouTube app clone).
             - DO NOT just use basic vertical inputs and text.
             - USE `st.columns` (e.g., `col1, col2 = st.columns(2)`) to create beautiful grids and media layouts.
-            - USE `st.sidebar` for navigation or extra menus.
-            - USE `st.expander` for hiding complex filters or data.
-            - Make it look incredible, visually rich, and professional.
+            - USE `st.markdown` with custom CSS for beautiful video thumbnails, rich text, rounded corners, and spacing.
         """
         
         if db_schema_sql and "NO_DB" not in db_schema_sql.upper(): 
@@ -340,7 +342,6 @@ def render_app_card(app, is_admin=False):
                             # 📱 MOBILE SIMULATOR UI
                             st.markdown("<h4 style='text-align: center; color: #888;'>📱 Mobile View Simulator</h4>", unsafe_allow_html=True)
                             
-                            # Centered column setup to mimic a mobile phone width
                             spacer1, phone_col, spacer2 = st.columns([1, 1.2, 1])
                             
                             with phone_col:
