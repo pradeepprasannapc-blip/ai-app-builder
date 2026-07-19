@@ -47,7 +47,7 @@ def clean_python_code(code_str):
         if line_str.startswith('st.footer'): continue
         if 'import supabase' in lower_line or 'from supabase' in lower_line: continue
         if 'create_client' in lower_line: continue
-        # Dummy credentials and bad libraries remover
+        # 🚨 Ultimate Dummy Data & Library Remover
         if 'supabase_url' in lower_line and '=' in lower_line: continue 
         if 'supabase_key' in lower_line and '=' in lower_line: continue 
         if 'supabase_secret' in lower_line and '=' in lower_line: continue 
@@ -107,6 +107,7 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
         safe_prefix = re.sub(r'[^a-zA-Z0-9]', '', str(app_data.get('app_name', 'app'))).lower()
         if not safe_prefix: safe_prefix = "custom_app"
         
+        # 🪄 SUPER MAGIC: Ultimate Constraint Handling
         auth_instruction = ""
         user_prompt_lower = last_user_prompt.lower()
         if any(word in user_prompt_lower for word in ["ඕනි නෑ", "ඕනෙ නෑ", "එපා", "නොමැතිව", "no login", "no auth", "without login"]):
@@ -169,10 +170,12 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
                 
                 conn.run("NOTIFY pgrst, 'reload schema'")
                 conn.close()
-                time.sleep(3) 
             except Exception as dbe: 
                 print("DB Schema Execution Error:", dbe)
                 pass
+        
+        # 🌟 RATE LIMIT PROTECTION MAGIC: Groq 429 Error Bypass
+        time.sleep(6) 
                 
         github_token = st.secrets.get("GITHUB_TOKEN", "")
         extra_context = ""
@@ -236,7 +239,13 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
             pass 
             
     except Exception as e:
-        error_msg = f"API Error: {str(e)}"
+        error_msg = str(e)
+        # 🚨 User Friendly Error Translation
+        if "429" in error_msg or "Rate limit" in error_msg:
+            error_msg = "⚠️ API Rate Limit (429): AI එන්ජිමේ කාර්යබහුලත්වය නිසා සීමාව ඉක්මවා ඇත. කරුණාකර විනාඩියක් රැඳී සිට නැවත 'Update App with AI' බොත්තම ඔබන්න. නැතහොත් 'Gemini (Pro)' Model එක තෝරා අලුතින් App එකක් සාදන්න."
+        else:
+            error_msg = f"API Error: {error_msg}"
+            
         db.table("generated_apps").update({"status": "failed", "app_code": error_msg}).eq("id", app_id).execute()
 
 def background_recovery_worker():
@@ -329,11 +338,9 @@ def render_app_card(app, is_admin=False):
                             # 📱 MOBILE SIMULATOR UI
                             st.markdown("<h4 style='text-align: center; color: #888;'>📱 Mobile View Simulator</h4>", unsafe_allow_html=True)
                             
-                            # Columns used to constrain width
                             spacer1, phone_col, spacer2 = st.columns([1, 1.5, 1])
                             
                             with phone_col:
-                                # Fixed height container simulates a mobile device screen
                                 with st.container(height=750, border=True):
                                     exec_globals = globals().copy()
                                     if 'supabase' in exec_globals:
