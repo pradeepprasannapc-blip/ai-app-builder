@@ -197,11 +197,13 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
         5. UNIQUE KEYS: EVERY st.input/button MUST have a unique `key=`.
         6. TABS RULE: NEVER use `key=` in `st.tabs`. ALWAYS use `tab1, tab2 = st.tabs(["A", "B"])` and `with tab1:`.
         7. EXCEPTION HANDLING: Catch all errors using a generic `except Exception as e:`. NEVER import `supabase.exceptions`.
-        8. 📱 MOBILE-FIRST PREMIUM UI/UX (EXTREMELY CRITICAL): The user expects a stunning, modern MOBILE APP interface (e.g., a YouTube clone).
-            - DO NOT use basic, ugly vertical forms.
-            - USE `st.columns` for grids, menus, and media layouts.
-            - USE `st.markdown` with custom CSS for beautiful video thumbnails, rich text, rounded corners, and spacing.
-            - Structure the layout so it looks incredible and professional inside a mobile phone screen constraint.
+        8. 📱 MOBILE-FIRST PREMIUM UI/UX (EXTREMELY CRITICAL): 
+            - The user expects a stunning, modern MOBILE APP interface (e.g., like a YouTube app clone).
+            - DO NOT just use basic vertical inputs and text.
+            - USE `st.columns` (e.g., `col1, col2 = st.columns(2)`) to create beautiful grids and media layouts.
+            - USE `st.sidebar` for navigation or extra menus.
+            - USE `st.expander` for hiding complex filters or data.
+            - Make it look incredible, visually rich, and professional.
         """
         
         if db_schema_sql and "NO_DB" not in db_schema_sql.upper(): 
@@ -338,10 +340,19 @@ def render_app_card(app, is_admin=False):
                             # 📱 MOBILE SIMULATOR UI
                             st.markdown("<h4 style='text-align: center; color: #888;'>📱 Mobile View Simulator</h4>", unsafe_allow_html=True)
                             
-                            spacer1, phone_col, spacer2 = st.columns([1, 1.5, 1])
+                            # Centered column setup to mimic a mobile phone width
+                            spacer1, phone_col, spacer2 = st.columns([1, 1.2, 1])
                             
                             with phone_col:
-                                with st.container(height=750, border=True):
+                                # Top Notch HTML
+                                st.markdown('''
+                                    <div style="background-color: #1E1E1E; border-radius: 30px 30px 0 0; padding: 10px; text-align: center; border: 2px solid #333; border-bottom: none; margin-bottom: -15px; position: relative; z-index: 10;">
+                                        <div style="width: 60px; height: 6px; background-color: #444; border-radius: 5px; display: inline-block;"></div>
+                                    </div>
+                                ''', unsafe_allow_html=True)
+                                
+                                # App Screen (Scrollable Container)
+                                with st.container(height=700, border=True):
                                     exec_globals = globals().copy()
                                     if 'supabase' in exec_globals:
                                         del exec_globals['supabase']
@@ -355,6 +366,12 @@ def render_app_card(app, is_admin=False):
                                             st.warning("⏳ AI එක අලුත් දත්ත ගබඩාවක් (Database Table) නිර්මාණය කරමින් පවතී. කරුණාකර තත්පර 15කින් පමණ නැවත බලන්න.")
                                         else:
                                             st.error(f"Preview Error: {inner_e}")
+                                            
+                                # Bottom Bezel HTML
+                                st.markdown('''
+                                    <div style="background-color: #1E1E1E; border-radius: 0 0 30px 30px; height: 25px; border: 2px solid #333; border-top: none; margin-top: -15px;"></div>
+                                ''', unsafe_allow_html=True)
+                                
                         except Exception as e: 
                             st.error(f"Preview Initialization Error: {e}")
                             
