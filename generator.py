@@ -47,7 +47,7 @@ def clean_python_code(code_str):
         if line_str.startswith('st.footer'): continue
         if 'import supabase' in lower_line or 'from supabase' in lower_line: continue
         if 'create_client' in lower_line: continue
-        # 🚨 Ultimate Dummy Data & Library Remover
+        # Ultimate Security & Stability Purge
         if 'supabase_url' in lower_line and '=' in lower_line: continue 
         if 'supabase_key' in lower_line and '=' in lower_line: continue 
         if 'supabase_secret' in lower_line and '=' in lower_line: continue 
@@ -107,7 +107,6 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
         safe_prefix = re.sub(r'[^a-zA-Z0-9]', '', str(app_data.get('app_name', 'app'))).lower()
         if not safe_prefix: safe_prefix = "custom_app"
         
-        # 🪄 SUPER MAGIC: Ultimate Constraint Handling
         auth_instruction = ""
         user_prompt_lower = last_user_prompt.lower()
         if any(word in user_prompt_lower for word in ["ඕනි නෑ", "ඕනෙ නෑ", "එපා", "නොමැතිව", "no login", "no auth", "without login"]):
@@ -119,7 +118,6 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
             - DO NOT create user management functions.
             - DO NOT use `st.session_state.logged_in`.
             - START THE MAIN APP FEATURES IMMEDIATELY ON THE HOME SCREEN.
-            - IF YOU GENERATE LOGIN CODE, THE SYSTEM WILL CRASH.
             """
 
         db_prompt = f"""
@@ -128,12 +126,12 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
         
         {auth_instruction}
         
-        Does this app need a database to store dynamic data (e.g., users, products, posts, tasks)?
+        Does this app need a database to store dynamic data?
         If YES: Write ONLY the PostgreSQL 'CREATE TABLE IF NOT EXISTS' statements required. 
         
         CRITICAL RULES FOR DB SCHEMA:
         1. NEVER name any table exactly 'users', 'payments', 'system_settings', 'device_logs', 'generated_apps', or 'app_versions'.
-        2. You MUST prefix ALL tables for this app with '{safe_prefix}_' (e.g., '{safe_prefix}_videos').
+        2. You MUST prefix ALL tables for this app with '{safe_prefix}_' (e.g., '{safe_prefix}_items').
         3. Ensure every table has an 'id' (UUID PRIMARY KEY DEFAULT gen_random_uuid()) and a 'created_at' column.
         4. If the user explicitly requested NO LOGIN, DO NOT create any user or auth tables.
         5. SECURITY BYPASS (CRITICAL): You MUST append these two lines for EVERY table you create:
@@ -191,21 +189,26 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
         
         CRITICAL RULES (VIOLATING THESE WILL CAUSE FATAL ERRORS):
         1. PURE PYTHON CODE ONLY. NO markdown. Start immediately with import streamlit as st.
-        2. NO SUPABASE INITIALIZATION (CRITICAL): NEVER define `supabase_url`, `supabase_key` or use `create_client()`. The `supabase` object is ALREADY INJECTED globally. Use it directly.
+        2. NO SUPABASE INITIALIZATION: NEVER define `supabase_url`, `supabase_key` or use `create_client()`. The `supabase` object is ALREADY INJECTED globally. Use it directly.
         3. SUPABASE V2 SYNTAX (CRITICAL): 
            - To read data, you MUST call `.select('*')` IMMEDIATELY after `.table('tbl')` BEFORE calling `.order()`, `.eq()`, or `.limit()`.
            - RIGHT: `data = supabase.table('tbl').select('*').order('created_at', desc=True).execute().data`
-           - WRONG: `data = supabase.table('tbl').order('created_at').execute()` -> This causes 'SyncRequestBuilder' has no attribute 'order' error!
            - You MUST append `.execute()` to EVERY query.
-        4. STRICT IMPORTS RULE (CRITICAL): You may ONLY import standard Python libraries and 'streamlit', 'requests', 'pandas', 'plotly'. DO NOT import 'bs4'.
+        4. STRICT IMPORTS RULE: ONLY import standard Python libraries and 'streamlit', 'requests', 'pandas', 'plotly'. DO NOT import 'bs4'.
         5. UNIQUE KEYS: EVERY st.input/button MUST have a unique `key=`.
         6. TABS RULE: NEVER use `key=` in `st.tabs`. ALWAYS use `tab1, tab2 = st.tabs(["A", "B"])` and `with tab1:`.
         7. EXCEPTION HANDLING: Catch all errors using a generic `except Exception as e:`. NEVER import `supabase.exceptions`.
-        8. 📱 MOBILE-FIRST PREMIUM UI/UX (EXTREMELY CRITICAL): 
-            - The user expects a stunning, modern MOBILE APP interface (e.g., like a YouTube app clone).
-            - DO NOT just use basic vertical inputs and text.
-            - USE `st.columns` (e.g., `col1, col2 = st.columns(2)`) to create beautiful grids and media layouts.
-            - USE `st.markdown` with custom CSS for beautiful video thumbnails, rich text, rounded corners, and spacing.
+        
+        8. 📱 DYNAMIC MOBILE-FIRST PREMIUM UI/UX: 
+            - The user expects a stunning, modern MOBILE APP interface suitable for the SPECIFIC TYPE of app they requested (e.g., E-commerce, Tool, Social Media, etc.).
+            - Structure the layout to look incredible inside a mobile phone screen constraint.
+            - USE `st.columns` for grids. USE `st.container` for cards and content.
+            
+        9. 🛑 ANTI-EMPTY STATE & REAL DATA FALLBACK RULE (EXTREMELY CRITICAL):
+           - NEVER render "Failed to load" or show an empty/blank screen if the database is currently empty.
+           - If querying the database returns NO DATA, you MUST automatically render high-quality DUMMY DATA relevant to the app type.
+           - For example, if it's a video app, use real YouTube links. If it's a shop, use dummy product names and placeholder image URLs. 
+           - The generated app MUST look fully populated, beautiful, and functional IMMEDIATELY upon first load.
         """
         
         if db_schema_sql and "NO_DB" not in db_schema_sql.upper(): 
