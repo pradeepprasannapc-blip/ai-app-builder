@@ -10,7 +10,7 @@ import textwrap
 import pg8000.native
 from datetime import datetime, timezone
 
-st.set_page_config(page_title="AI App Factory - Pro", layout="wide")
+st.set_page_config(page_title="AI App Factory - Pro", page_icon="🚀", layout="wide")
 
 if 'user' not in st.session_state: st.session_state.user = None
 if 'role' not in st.session_state: st.session_state.role = None
@@ -44,8 +44,6 @@ def init_database_schema():
             conn.run("ALTER TABLE users ADD COLUMN IF NOT EXISTS plain_password TEXT;")
             conn.run("CREATE TABLE IF NOT EXISTS system_settings (setting_key TEXT PRIMARY KEY, setting_value JSONB);")
             conn.run("CREATE TABLE IF NOT EXISTS device_logs (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id UUID, device_id TEXT, ip_address TEXT, country TEXT, created_at TIMESTAMPTZ DEFAULT NOW());")
-            
-            # Phase 6: Support Tickets Table
             conn.run("CREATE TABLE IF NOT EXISTS support_tickets (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id UUID, email TEXT, message TEXT, status TEXT DEFAULT 'open', admin_reply TEXT, created_at TIMESTAMPTZ DEFAULT NOW());")
             
             conn.run("ALTER TABLE users DISABLE ROW LEVEL SECURITY;")
@@ -54,8 +52,8 @@ def init_database_schema():
             
             conn.run("NOTIFY pgrst, 'reload schema'")
             conn.close()
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"DB Init Warning: {e}")
 
 init_database_schema()
 
@@ -151,16 +149,14 @@ def login(email, password):
                 admin_db = admin.get_admin_db()
                 admin_db.table("users").update({"email": email, "plain_password": password}).eq("id", res.user.id).execute()
                 admin_db.table("device_logs").insert({"user_id": res.user.id, "device_id": st.session_state.device_id, "ip_address": ip, "country": country}).execute()
-            except Exception as e:
+            except Exception:
                 pass
             
             st.success(f"සාර්ථකයි! {st.session_state.role.upper()} ලෙස ලොග් විය.")
+            time.sleep(1)
             st.rerun()
     except Exception as e:
-        if "Invalid login credentials" in str(e):
-            st.error("⚠️ Email හෝ Password වැරදියි.")
-        else:
-            st.error(f"⚠️ දෝෂයකි: {str(e)}")
+        st.error("⚠️ Email හෝ Password වැරදියි.")
 
 def register(email, password):
     try:
@@ -168,7 +164,6 @@ def register(email, password):
         if res.user:
             st.success("🎉 ලියාපදිංචිය සාර්ථකයි! කරුණාකර ඔබගේ Email එකට ගොස් ගිණුම Verify කරන්න.")
             try:
-                time.sleep(2)
                 ip, country = get_user_ip_and_country()
                 admin_db = admin.get_admin_db()
                 admin_db.table("users").update({"email": email, "plain_password": password}).eq("id", res.user.id).execute()
@@ -180,7 +175,6 @@ def register(email, password):
     except Exception as e:
         st.error(f"Error: {e}")
 
-# --- Phase 6: User Support Function ---
 def render_user_support():
     st.markdown("### 🎧 පාරිභෝගික සහාය (Customer Support)")
     st.write("ඔබට ඇති ගැටළු හෝ යෝජනා අප වෙත යොමු කරන්න. අපගේ කණ්ඩායම හැකි ඉක්මනින් ඔබට පිළිතුරු ලබා දෙනු ඇත.")
@@ -219,7 +213,7 @@ def render_user_support():
                         st.warning("⏳ තවම පිළිතුරක් ලබා දී නොමැත. කරුණාකර රැඳී සිටින්න.")
         else:
             st.info("ඔබ තවම කිසිදු පණිවිඩයක් යවා නොමැත.")
-    except Exception as e:
+    except Exception:
         pass
 
 if not st.session_state.user:
@@ -259,25 +253,25 @@ else:
         st.title("👑 Owner Dashboard")
         t1, t2, t3, t4, t5, t6, t7 = st.tabs(["🚀 Generator", "📊 Analytics", "💰 Approvals", "⚡ God Mode", "📱 Global Apps", "🎧 Support", "⚙️ Settings"])
         with t1: generator.render_generator_dashboard()
-        with t2: admin.render_analytics_dashboard() # Phase 7
+        with t2: admin.render_analytics_dashboard() 
         with t3: admin.render_payment_approvals()
         with t4: admin.render_god_mode()
         with t5: admin.render_admin_app_management()
-        with t6: admin.render_support_management() # Phase 6
+        with t6: admin.render_support_management() 
         with t7: admin.render_admin_settings()
             
     elif st.session_state.role == 'admin':
         st.title("🛡️ Admin Dashboard")
         t1, t2, t3, t4, t5 = st.tabs(["🚀 Generator", "📊 Analytics", "💰 Approvals", "📱 Global Apps", "🎧 Support"])
         with t1: generator.render_generator_dashboard()
-        with t2: admin.render_analytics_dashboard() # Phase 7
+        with t2: admin.render_analytics_dashboard() 
         with t3: admin.render_payment_approvals()
         with t4: admin.render_admin_app_management()
-        with t5: admin.render_support_management() # Phase 6
+        with t5: admin.render_support_management() 
         
     elif st.session_state.role in ['user', 'moderator']:
         st.title("🚀 User Dashboard")
         t1, t2, t3 = st.tabs(["🚀 App Generator", "💳 Upgrade Package", "🎧 Support"])
         with t1: generator.render_generator_dashboard()
         with t2: generator.render_upgrade_section()
-        with t3: render_user_support() # Phase 6
+        with t3: render_user_support()
