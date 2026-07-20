@@ -139,7 +139,7 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
         5. SECURITY BYPASS (CRITICAL): You MUST append these two lines for EVERY table you create:
            ALTER TABLE {safe_prefix}_<table_name> DISABLE ROW LEVEL SECURITY;
            GRANT ALL ON TABLE {safe_prefix}_<table_name> TO anon, authenticated, service_role;
-        6. NO MARKDOWN. NO ```sql tags. Output purely raw SQL text separated by semicolons.
+        6. NO MARKDOWN. Output purely raw SQL text separated by semicolons.
         
         If NO: Output EXACTLY the word: NO_DB
         """
@@ -174,7 +174,7 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
                 print("DB Schema Execution Error:", dbe)
                 pass
         
-        # 🌟 RATE LIMIT PROTECTION MAGIC: Groq 429 Error Bypass
+        # 🌟 RATE LIMIT PROTECTION MAGIC
         time.sleep(6) 
                 
         github_token = st.secrets.get("GITHUB_TOKEN", "")
@@ -192,14 +192,14 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
         CRITICAL RULES (VIOLATING THESE WILL CAUSE FATAL ERRORS):
         1. PURE PYTHON CODE ONLY. NO markdown. Start immediately with import streamlit as st.
         2. NO SUPABASE INITIALIZATION (CRITICAL): NEVER define `supabase_url`, `supabase_key` or use `create_client()`. The `supabase` object is ALREADY INJECTED globally. Use it directly.
-        3. SUPABASE V2 SYNTAX (CRITICAL - AVOID 'SyncRequestBuilder' ERROR): 
-           - To read or filter data, you MUST call `.select('*')` IMMEDIATELY after `.table('tbl')` BEFORE calling `.order()`, `.eq()`, or `.limit()`.
+        3. SUPABASE V2 SYNTAX (CRITICAL): 
+           - To read data, you MUST call `.select('*')` IMMEDIATELY after `.table('tbl')` BEFORE calling `.order()`, `.eq()`, or `.limit()`.
            - RIGHT: `data = supabase.table('tbl').select('*').order('created_at', desc=True).execute().data`
            - WRONG: `data = supabase.table('tbl').order('created_at').execute()` -> This causes 'SyncRequestBuilder' has no attribute 'order' error!
            - You MUST append `.execute()` to EVERY query.
-        4. STRICT IMPORTS RULE (CRITICAL): You may ONLY import standard Python libraries and 'streamlit', 'requests', 'pandas', 'plotly'. YOU ARE STRICTLY FORBIDDEN from importing 'bs4', 'beautifulsoup4', 'numpy', or any other unapproved external library.
+        4. STRICT IMPORTS RULE (CRITICAL): You may ONLY import standard Python libraries and 'streamlit', 'requests', 'pandas', 'plotly'. DO NOT import 'bs4'.
         5. UNIQUE KEYS: EVERY st.input/button MUST have a unique `key=`.
-        6. TABS RULE: NEVER use `key=` in `st.tabs`.
+        6. TABS RULE: NEVER use `key=` in `st.tabs`. ALWAYS use `tab1, tab2 = st.tabs(["A", "B"])` and `with tab1:`.
         7. EXCEPTION HANDLING: Catch all errors using a generic `except Exception as e:`. NEVER import `supabase.exceptions`.
         8. 📱 MOBILE-FIRST PREMIUM UI/UX (EXTREMELY CRITICAL): 
             - The user expects a stunning, modern MOBILE APP interface (e.g., like a YouTube app clone).
@@ -244,9 +244,8 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
             
     except Exception as e:
         error_msg = str(e)
-        # 🚨 User Friendly Error Translation
         if "429" in error_msg or "Rate limit" in error_msg:
-            error_msg = "⚠️ API Rate Limit (429): AI එන්ජිමේ කාර්යබහුලත්වය නිසා සීමාව ඉක්මවා ඇත. කරුණාකර විනාඩියක් රැඳී සිට නැවත 'Update App with AI' බොත්තම ඔබන්න. නැතහොත් 'Gemini (Pro)' Model එක තෝරා අලුතින් App එකක් සාදන්න."
+            error_msg = "⚠️ API Rate Limit (429): AI එන්ජිමේ කාර්යබහුලත්වය නිසා සීමාව ඉක්මවා ඇත. කරුණාකර විනාඩියක් රැඳී සිට නැවත උත්සාහ කරන්න."
         else:
             error_msg = f"API Error: {error_msg}"
             
@@ -342,6 +341,7 @@ def render_app_card(app, is_admin=False):
                             # 📱 MOBILE SIMULATOR UI
                             st.markdown("<h4 style='text-align: center; color: #888;'>📱 Mobile View Simulator</h4>", unsafe_allow_html=True)
                             
+                            # Centered column setup to mimic a mobile phone width
                             spacer1, phone_col, spacer2 = st.columns([1, 1.2, 1])
                             
                             with phone_col:
@@ -410,7 +410,7 @@ def render_app_card(app, is_admin=False):
                                 else:
                                     with st.spinner("🚀 Build කරමින් පවතී..."):
                                         headers = {"Accept": "application/vnd.github.v3+json", "Authorization": f"token {clean_token}"}
-                                        custom_app_url = f"[https://ai-app-builder-x6qbi2k3iobvvzqbktkfma.streamlit.app/?app_id=](https://ai-app-builder-x6qbi2k3iobvvzqbktkfma.streamlit.app/?app_id=){str(app['id'])}"
+                                        custom_app_url = f"https://ai-app-builder-x6qbi2k3iobvvzqbktkfma.streamlit.app/?app_id={str(app['id'])}"
                                         payload = {
                                             "event_type": "build_apk",
                                             "client_payload": {
@@ -419,7 +419,7 @@ def render_app_card(app, is_admin=False):
                                                 "app_icon_url": app.get('app_icon_url', ''), "app_url": custom_app_url
                                             }
                                         }
-                                        res = requests.post(f"[https://api.github.com/repos/](https://api.github.com/repos/){clean_repo}/dispatches", json=payload, headers=headers)
+                                        res = requests.post(f"https://api.github.com/repos/{clean_repo}/dispatches", json=payload, headers=headers)
                                         if res.status_code == 204:
                                             st.success(f"✅ APK එක සෑදීම ආරම්භ විය! කරුණාකර විනාඩි 2ක් හෝ 3ක් රැඳී සිට පහත බොත්තම ඔබන්න.")
                                         else: 
@@ -437,7 +437,7 @@ def render_app_card(app, is_admin=False):
                                     clean_repo = re.sub(r'[^a-zA-Z0-9_./-]', '', raw_repo)
                                     
                                     headers = {"Authorization": f"token {clean_token}"}
-                                    url = f"[https://api.github.com/repos/](https://api.github.com/repos/){clean_repo}/actions/artifacts"
+                                    url = f"https://api.github.com/repos/{clean_repo}/actions/artifacts"
                                     req = requests.get(url, headers=headers)
                                     
                                     if req.status_code == 200:
