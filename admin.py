@@ -163,10 +163,9 @@ def render_admin_app_management():
                 generator.render_app_card(app, is_admin=True)
         else:
             st.info("කිසිදු App එකක් පද්ධතියේ නොමැත.")
-    except Exception as e:
+    except Exception:
         st.warning("⏳ Apps Database is syncing...")
 
-# --- Phase 6: Admin Support Management ---
 def render_support_management():
     st.markdown("### 🎧 Support Tickets Management")
     admin_db = get_admin_db()
@@ -207,10 +206,9 @@ def render_support_management():
                             st.rerun()
         else:
             st.info("No tickets found matching the filter.")
-    except Exception as e:
-        st.warning(f"⏳ Support Tickets Database යාවත්කාලීන වෙමින් පවතී. කරුණාකර සුළු මොහොතකින් පිටුව Refresh කරන්න.")
+    except Exception:
+        st.warning(f"⏳ Support Tickets Database යාවත්කාලීන වෙමින් පවතී.")
 
-# --- Phase 7: Dashboard Analytics ---
 def render_analytics_dashboard():
     st.markdown("### 📊 System Analytics & Revenue")
     admin_db = get_admin_db()
@@ -241,5 +239,5 @@ def render_analytics_dashboard():
         with col3:
             st.warning(f"💰 Total Revenue (LKR)\n\n### Rs. {total_revenue:,}")
             
-    except Exception as e:
+    except Exception:
         st.warning("⏳ Analytics data is syncing...")
