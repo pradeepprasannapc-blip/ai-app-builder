@@ -33,7 +33,6 @@ def trigger_social_proof():
         st.session_state.show_toast = False 
 
 def clean_python_code(code_str):
-    # 🚨 FIX: Remove non-breaking spaces (\xa0) that cause 'invalid syntax' errors
     code_str = str(code_str).replace('\xa0', ' ')
     code_str = code_str.replace("```python", "").replace("```", "").strip()
     
@@ -50,7 +49,6 @@ def clean_python_code(code_str):
         if line_str.startswith('st.footer'): continue
         if 'import supabase' in lower_line or 'from supabase' in lower_line: continue
         if 'create_client' in lower_line: continue
-        # Ultimate Security & Stability Purge
         if 'supabase_url' in lower_line and '=' in lower_line: continue 
         if 'supabase_key' in lower_line and '=' in lower_line: continue 
         if 'supabase_secret' in lower_line and '=' in lower_line: continue 
@@ -175,7 +173,6 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
                 print("DB Schema Execution Error:", dbe)
                 pass
         
-        # 🌟 RATE LIMIT PROTECTION MAGIC
         time.sleep(6) 
                 
         github_token = st.secrets.get("GITHUB_TOKEN", "")
@@ -345,7 +342,6 @@ def render_app_card(app, is_admin=False):
                         try:
                             safe_code = clean_python_code(current_code)
                             
-                            # 📱 MOBILE SIMULATOR UI
                             st.markdown("<h4 style='text-align: center; color: #888;'>📱 Mobile View Simulator</h4>", unsafe_allow_html=True)
                             
                             spacer1, phone_col, spacer2 = st.columns([1, 1.2, 1])
@@ -632,22 +628,30 @@ def render_upgrade_section():
     with col2: 
         st.warning(f"**🥇 Gold Package**\n\n- අසීමිත Apps & Source Code.\n- ⏳ දින 30යි\n- **Rs. {pricing.get('gold_price', 5000)}**")
         
-    st.markdown("#### 🏦 ගෙවීම් කළ යුතු ගිණුම් විස්තර")
+    st.markdown("---")
+    st.markdown("### 🏦 Payment Details")
     
-    # --- NEW BEAUTIFUL PAYMENT UI ---
+    # 🚨 FINAL POLISH: Beautiful Custom Payment UI using Streamlit native formatting
     c1, c2 = st.columns(2)
     with c1:
         with st.container(border=True):
-            st.markdown("##### 📱 iPay / Online Transfer")
-            st.code(payment.get('ipay_num', ''), language=None)
-            st.caption(f"Name: **{payment.get('ipay_name', '').upper()}**")
+            st.markdown("#### 📲 iPay Payment Details")
+            st.markdown(f"""
+            * **App Name:** iPay
+            * **Mobile Number:** `{payment.get('ipay_num', '')}`
+            * **Account Name:** {payment.get('ipay_name', '').upper()}
+            """)
             
     with c2:
         with st.container(border=True):
-            st.markdown("##### 🏦 BOC Flex / CDM")
-            st.code(payment.get('boc_num', ''), language=None)
-            st.caption(f"Name: **{payment.get('boc_name', '').upper()}**")
-    # --------------------------------
+            st.markdown("#### 🏦 Flex Payment Details")
+            st.markdown(f"""
+            * **Method:** Flex BOC
+            * **Account Number:** `{payment.get('boc_num', '')}`
+            * **Account Name:** {payment.get('boc_name', '').upper()}
+            """)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
     
     with st.form("payment_form"):
         selected_pkg = st.selectbox("පැකේජය තෝරන්න:", ["silver", "gold"])
