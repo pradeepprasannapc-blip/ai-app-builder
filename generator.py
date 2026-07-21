@@ -33,7 +33,10 @@ def trigger_social_proof():
         st.session_state.show_toast = False 
 
 def clean_python_code(code_str):
-    code_str = str(code_str).replace("```python", "").replace("```", "").strip()
+    # 🚨 FIX: Remove non-breaking spaces (\xa0) that cause 'invalid syntax' errors
+    code_str = str(code_str).replace('\xa0', ' ')
+    code_str = code_str.replace("```python", "").replace("```", "").strip()
+    
     lines = code_str.split('\n')
     while lines and not lines[0].strip():
         lines.pop(0)
@@ -204,10 +207,11 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
             - Structure the layout to look incredible inside a mobile phone screen constraint.
             - USE `st.columns` for grids. USE `st.container` for cards and content.
             
-        9. 🛑 ANTI-EMPTY STATE & REAL DATA FALLBACK RULE (EXTREMELY CRITICAL):
+        9. 🛑 SYNTAX & ANTI-EMPTY STATE RULE (EXTREMELY CRITICAL):
+           - ALWAYS use exactly 4 regular spaces for Python indentation. NEVER use non-breaking spaces (\\xa0).
            - NEVER render "Failed to load" or show an empty/blank screen if the database is currently empty.
            - If querying the database returns NO DATA, you MUST automatically render high-quality DUMMY DATA relevant to the app type.
-           - For example, if it's a video app, use real YouTube links. If it's a shop, use dummy product names and placeholder image URLs. 
+           - For example, if it's a video app, use real YouTube links (e.g., 'https://www.youtube.com/watch?v=dQw4w9WgXcQ'). If it's a shop, use dummy product names and placeholder image URLs. 
            - The generated app MUST look fully populated, beautiful, and functional IMMEDIATELY upon first load.
         """
         
