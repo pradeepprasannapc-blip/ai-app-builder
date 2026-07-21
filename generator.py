@@ -342,6 +342,7 @@ def render_app_card(app, is_admin=False):
                         try:
                             safe_code = clean_python_code(current_code)
                             
+                            # 📱 MOBILE SIMULATOR UI
                             st.markdown("<h4 style='text-align: center; color: #888;'>📱 Mobile View Simulator</h4>", unsafe_allow_html=True)
                             
                             spacer1, phone_col, spacer2 = st.columns([1, 1.2, 1])
@@ -617,7 +618,7 @@ def render_upgrade_section():
     pricing = settings.get("pricing", {"silver_price": 2500, "gold_price": 5000})
     payment = settings.get("payment_details", {
         "ipay_num": "0757970703", 
-        "ipay_name": "w.k.pradeep prasanna", 
+        "ipay_name": "PRADEEP PRASANNA", 
         "boc_num": "88314511", 
         "boc_name": "W.K.P.P.SENEVIRATHNA"
     })
@@ -628,30 +629,33 @@ def render_upgrade_section():
     with col2: 
         st.warning(f"**🥇 Gold Package**\n\n- අසීමිත Apps & Source Code.\n- ⏳ දින 30යි\n- **Rs. {pricing.get('gold_price', 5000)}**")
         
-    st.markdown("---")
-    st.markdown("### 🏦 Payment Details")
+    st.markdown("#### 🏦 Payment Details")
     
-    # 🚨 FINAL POLISH: Beautiful Custom Payment UI using Streamlit native formatting
-    c1, c2 = st.columns(2)
-    with c1:
-        with st.container(border=True):
-            st.markdown("#### 📲 iPay Payment Details")
-            st.markdown(f"""
-            * **App Name:** iPay
-            * **Mobile Number:** `{payment.get('ipay_num', '')}`
-            * **Account Name:** {payment.get('ipay_name', '').upper()}
-            """)
-            
-    with c2:
-        with st.container(border=True):
-            st.markdown("#### 🏦 Flex Payment Details")
-            st.markdown(f"""
-            * **Method:** Flex BOC
-            * **Account Number:** `{payment.get('boc_num', '')}`
-            * **Account Name:** {payment.get('boc_name', '').upper()}
-            """)
+    # 🚨 FINAL POLISH: Match the specific dark card UI exactly with HTML/CSS
+    ipay_num = payment.get('ipay_num', '')
+    ipay_name = payment.get('ipay_name', '').upper()
+    boc_num = payment.get('boc_num', '')
+    boc_name = payment.get('boc_name', '').upper()
+
+    st.markdown(f"""
+    <div style="background-color: #1A1D24; padding: 20px; border-radius: 10px; border-left: 6px solid #2B6CB0; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+        <h4 style="color: #38B2AC; margin-top: 0; font-family: sans-serif;">📲 iPay Payment Details</h4>
+        <ul style="color: #E2E8F0; font-size: 16px; line-height: 1.8;">
+            <li><b>App Name:</b> iPay</li>
+            <li><b>Mobile Number:</b> <span style="background-color:#22543D; color:#68D391; padding: 2px 8px; border-radius: 4px; font-family: monospace;">{ipay_num}</span></li>
+            <li><b>Account Name:</b> {ipay_name}</li>
+        </ul>
+    </div>
     
-    st.markdown("<br>", unsafe_allow_html=True)
+    <div style="background-color: #1A1D24; padding: 20px; border-radius: 10px; border-left: 6px solid #D69E2E; margin-bottom: 25px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+        <h4 style="color: #ECC94B; margin-top: 0; font-family: sans-serif;">🏦 Flex Payment Details</h4>
+        <ul style="color: #E2E8F0; font-size: 16px; line-height: 1.8;">
+            <li><b>Method:</b> Flex BOC</li>
+            <li><b>Account Number:</b> <span style="background-color:#22543D; color:#68D391; padding: 2px 8px; border-radius: 4px; font-family: monospace;">{boc_num}</span></li>
+            <li><b>Account Name:</b> {boc_name}</li>
+        </ul>
+    </div>
+    """, unsafe_allow_html=True)
     
     with st.form("payment_form"):
         selected_pkg = st.selectbox("පැකේජය තෝරන්න:", ["silver", "gold"])
