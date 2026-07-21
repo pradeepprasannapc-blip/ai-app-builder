@@ -58,7 +58,10 @@ def init_database_schema():
 init_database_schema()
 
 def clean_python_code(code_str):
-    code_str = str(code_str).replace("```python", "").replace("```", "").strip()
+    # 🚨 FIX: Remove non-breaking spaces (\xa0) that cause 'invalid syntax' errors
+    code_str = str(code_str).replace('\xa0', ' ')
+    code_str = code_str.replace("```python", "").replace("```", "").strip()
+    
     lines = code_str.split('\n')
     while lines and not lines[0].strip():
         lines.pop(0)
