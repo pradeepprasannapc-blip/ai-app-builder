@@ -203,7 +203,7 @@ def process_single_app(app_data, groq_key, gemini_key, supa_url, supa_service_ke
         7. EXCEPTION HANDLING: Catch all errors using a generic `except Exception as e:`. NEVER import `supabase.exceptions`.
         
         8. 📱 DYNAMIC MOBILE-FIRST PREMIUM UI/UX: 
-            - The user expects a stunning, modern MOBILE APP interface suitable for the SPECIFIC TYPE of app they requested (e.g., E-commerce, Tool, Social Media, etc.).
+            - The user expects a stunning, modern MOBILE APP interface suitable for the SPECIFIC TYPE of app they requested.
             - Structure the layout to look incredible inside a mobile phone screen constraint.
             - USE `st.columns` for grids. USE `st.container` for cards and content.
             
@@ -348,18 +348,15 @@ def render_app_card(app, is_admin=False):
                             # 📱 MOBILE SIMULATOR UI
                             st.markdown("<h4 style='text-align: center; color: #888;'>📱 Mobile View Simulator</h4>", unsafe_allow_html=True)
                             
-                            # Centered column setup to mimic a mobile phone width
                             spacer1, phone_col, spacer2 = st.columns([1, 1.2, 1])
                             
                             with phone_col:
-                                # Top Notch HTML
                                 st.markdown('''
                                     <div style="background-color: #1E1E1E; border-radius: 30px 30px 0 0; padding: 10px; text-align: center; border: 2px solid #333; border-bottom: none; margin-bottom: -15px; position: relative; z-index: 10;">
                                         <div style="width: 60px; height: 6px; background-color: #444; border-radius: 5px; display: inline-block;"></div>
                                     </div>
                                 ''', unsafe_allow_html=True)
                                 
-                                # App Screen (Scrollable Container)
                                 with st.container(height=700, border=True):
                                     exec_globals = globals().copy()
                                     if 'supabase' in exec_globals:
@@ -375,7 +372,6 @@ def render_app_card(app, is_admin=False):
                                         else:
                                             st.error(f"Preview Error: {inner_e}")
                                             
-                                # Bottom Bezel HTML
                                 st.markdown('''
                                     <div style="background-color: #1E1E1E; border-radius: 0 0 30px 30px; height: 25px; border: 2px solid #333; border-top: none; margin-top: -15px;"></div>
                                 ''', unsafe_allow_html=True)
@@ -638,22 +634,20 @@ def render_upgrade_section():
         
     st.markdown("#### 🏦 ගෙවීම් කළ යුතු ගිණුම් විස්තර")
     
-    st.markdown(f"""
-    <div style="display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 20px;">
-        <div style="flex: 1; background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); padding: 25px; border-radius: 15px; color: white; box-shadow: 0 10px 20px rgba(0,0,0,0.2);">
-            <h3 style="margin-top:0; color: #4dc9ff; font-family: sans-serif;">📱 iPay / Online Transfer</h3>
-            <p style="font-size: 18px; margin: 8px 0; opacity: 0.9;">Account Number</p>
-            <h2 style="margin: 0; font-size: 28px; letter-spacing: 2px;">{{payment.get('ipay_num', '')}}</h2>
-            <p style="font-size: 16px; margin: 15px 0 0 0; color: #b3d4ff;">Name: <strong style="color: white;">{{payment.get('ipay_name', '').upper()}}</strong></p>
-        </div>
-        <div style="flex: 1; background: linear-gradient(135deg, #d4af37 0%, #aa7700 100%); padding: 25px; border-radius: 15px; color: white; box-shadow: 0 10px 20px rgba(0,0,0,0.2);">
-            <h3 style="margin-top:0; color: #fffef0; font-family: sans-serif;">🏦 BOC Flex / CDM Machine</h3>
-            <p style="font-size: 18px; margin: 8px 0; opacity: 0.9;">Account Number</p>
-            <h2 style="margin: 0; font-size: 28px; letter-spacing: 2px;">{{payment.get('boc_num', '')}}</h2>
-            <p style="font-size: 16px; margin: 15px 0 0 0; color: #ffefb3;">Name: <strong style="color: white;">{{payment.get('boc_name', '').upper()}}</strong></p>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    # --- NEW BEAUTIFUL PAYMENT UI ---
+    c1, c2 = st.columns(2)
+    with c1:
+        with st.container(border=True):
+            st.markdown("##### 📱 iPay / Online Transfer")
+            st.code(payment.get('ipay_num', ''), language=None)
+            st.caption(f"Name: **{payment.get('ipay_name', '').upper()}**")
+            
+    with c2:
+        with st.container(border=True):
+            st.markdown("##### 🏦 BOC Flex / CDM")
+            st.code(payment.get('boc_num', ''), language=None)
+            st.caption(f"Name: **{payment.get('boc_name', '').upper()}**")
+    # --------------------------------
     
     with st.form("payment_form"):
         selected_pkg = st.selectbox("පැකේජය තෝරන්න:", ["silver", "gold"])
